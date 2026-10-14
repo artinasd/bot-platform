@@ -21,7 +21,7 @@ describe("provider-operation executor registry", () => {
   it("routes an exact provider type and action with resolved credentials", async () => {
     const execute = vi.fn().mockResolvedValue({ providerRef: "provider-ref-a" });
     const registry = createProviderOperationExecutorRegistry([
-      { providerType: "TEST", action: "subscription.create", execute }
+      { providerType: "TEST", action: "subscription.create", validateRequestPayload: vi.fn(), execute }
     ]);
     await expect(registry(operation, credentials)).resolves.toEqual({ providerRef: "provider-ref-a" });
     expect(execute).toHaveBeenCalledWith(operation, credentials);
@@ -50,7 +50,7 @@ describe("provider-operation executor registry", () => {
   it("fails closed for an unregistered action without invoking an executor", async () => {
     const execute = vi.fn();
     const registry = createProviderOperationExecutorRegistry([
-      { providerType: "TEST", action: "subscription.create", execute }
+      { providerType: "TEST", action: "subscription.create", validateRequestPayload: vi.fn(), execute }
     ]);
     await expect(registry({ ...operation, action: "subscription.delete" }, credentials)).rejects.toMatchObject({
       name: "ProviderOperationExecutionError",
@@ -63,7 +63,7 @@ describe("provider-operation executor registry", () => {
   it("fails closed when the selected connection has an unregistered provider type", async () => {
     const execute = vi.fn();
     const registry = createProviderOperationExecutorRegistry([
-      { providerType: "TEST", action: "subscription.create", execute }
+      { providerType: "TEST", action: "subscription.create", validateRequestPayload: vi.fn(), execute }
     ]);
     await expect(registry(operation, { ...credentials, providerType: "OTHER" })).rejects.toMatchObject({
       name: "ProviderOperationExecutionError",
@@ -85,14 +85,14 @@ describe("provider-operation executor registry", () => {
 
   it.each(["", " ", " subscription.create", "subscription.create "])("rejects non-canonical action registration %j", (action) => {
     expect(() => createProviderOperationExecutorRegistry([
-      { providerType: "TEST", action, execute: vi.fn() }
+      { providerType: "TEST", action, validateRequestPayload: vi.fn(), execute: vi.fn() }
     ])).toThrow(/action must be a non-empty canonical string/);
   });
 
   it("rejects duplicate provider type and action registrations instead of overwriting", () => {
     expect(() => createProviderOperationExecutorRegistry([
-      { providerType: "TEST", action: "subscription.create", execute: vi.fn() },
-      { providerType: "TEST", action: "subscription.create", execute: vi.fn() }
+      { providerType: "TEST", action: "subscription.create", validateRequestPayload: vi.fn(), execute: vi.fn() },
+      { providerType: "TEST", action: "subscription.create", validateRequestPayload: vi.fn(), execute: vi.fn() }
     ])).toThrow('Provider-operation executor for "TEST" action "subscription.create" is already registered.');
   });
 
@@ -100,8 +100,8 @@ describe("provider-operation executor registry", () => {
     const testExecutor = vi.fn().mockResolvedValue({ providerRef: "test-ref" });
     const otherExecutor = vi.fn().mockResolvedValue({ providerRef: "other-ref" });
     const registry = createProviderOperationExecutorRegistry([
-      { providerType: "TEST", action: "subscription.create", execute: testExecutor },
-      { providerType: "OTHER", action: "subscription.create", execute: otherExecutor }
+      { providerType: "TEST", action: "subscription.create", validateRequestPayload: vi.fn(), execute: testExecutor },
+      { providerType: "OTHER", action: "subscription.create", validateRequestPayload: vi.fn(), execute: otherExecutor }
     ]);
     return expect(registry(operation, credentials)).resolves.toEqual({ providerRef: "test-ref" });
   });
