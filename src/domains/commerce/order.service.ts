@@ -16,6 +16,31 @@ export type CreateOrderInput = {
   items: CreateOrderItemInput[];
 };
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function assertSameOrderRequest(
+  existingItems: Array<{ productId: string; planId: string | null; quantity: number; configuration: unknown }>,
+  requestedItems: CreateOrderItemInput[]
+) {
+  const matches = existingItems.length === requestedItems.length && existingItems.every((existing, index) => {
+    const requested = requestedItems[index];
+    return existing.productId === requested.productId &&
+      existing.planId === (requested.planId ?? null) &&
+      existing.quantity === requested.quantity &&
+      stableJson(existing.configuration) === stableJson(requested.configuration ?? {});
+  });
+  if (!matches) {
+    throw new Error("Idempotency key is already associated with a different order request.");
+  }
+}
+
 export class OrderService {
   constructor(private readonly db: PrismaClient) {}
 
@@ -37,6 +62,7 @@ export class OrderService {
         where: { tenantId: input.tenantId, orderId: existing.id },
         orderBy: { createdAt: "asc" }
       });
+      assertSameOrderRequest(items, input.items);
       return { order: { ...existing, items }, duplicate: true };
     }
 
@@ -149,6 +175,7 @@ export class OrderService {
             where: { tenantId: input.tenantId, orderId: existingOrder.id },
             orderBy: { createdAt: "asc" }
           });
+          assertSameOrderRequest(items, input.items);
           return { order: { ...existingOrder, items }, duplicate: true };
         }
       }

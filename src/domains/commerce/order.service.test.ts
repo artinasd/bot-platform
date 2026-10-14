@@ -94,7 +94,7 @@ describe("order service input validation", () => {
   
   it("returns the existing order for a same-customer idempotent retry", async () => {
     const existingOrder = { id: "order-a", tenantId: "tenant-a", customerId: "customer-a", idempotencyKey: "retry-key" };
-    const existingItems = [{ id: "item-a", orderId: "order-a" }];
+    const existingItems = [{ id: "item-a", orderId: "order-a", productId: "product-a", planId: null, quantity: 1, configuration: {} }];
     const db = {
       order: { findFirst: async () => existingOrder },
       orderItem: { findMany: async () => existingItems }
@@ -110,6 +110,23 @@ describe("order service input validation", () => {
       order: { ...existingOrder, items: existingItems },
       duplicate: true
     });
+  });
+
+  it("rejects reuse of an idempotency key for a different order payload", async () => {
+    const existingOrder = { id: "order-a", tenantId: "tenant-a", customerId: "customer-a", idempotencyKey: "retry-key" };
+    const existingItems = [{ id: "item-a", orderId: "order-a", productId: "product-a", planId: null, quantity: 1, configuration: {} }];
+    const db = {
+      order: { findFirst: async () => existingOrder },
+      orderItem: { findMany: async () => existingItems }
+    };
+    const service = new OrderService(db as never);
+
+    await expect(service.create({
+      tenantId: "tenant-a",
+      customerId: "customer-a",
+      idempotencyKey: "retry-key",
+      items: [{ productId: "product-b", quantity: 1 }]
+    })).rejects.toThrow(/different order request/i);
   });
 
   it("rejects reuse of an idempotency key by a different customer", async () => {
