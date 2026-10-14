@@ -59,7 +59,14 @@ describe("ProviderOperationRetryService", () => {
   });
 
   it("returns the existing retry generation when a request is repeated after commit", async () => {
-    const existingJob = { id: "job-retry-a", status: JobStatus.QUEUED };
+    const existingJob = {
+      id: "job-retry-a",
+      tenantId: "tenant-a",
+      type: "provider.operation.execute",
+      payload: { operationId: "operation-a" },
+      idempotencyKey: "provider-operation:operation-a:retry:2",
+      status: JobStatus.QUEUED
+    };
     mocks.findOperation.mockResolvedValue({ ...operation, status: ProviderOperationStatus.PENDING });
     mocks.findRetryGeneration.mockResolvedValue(existingJob);
     const result = await makeService().requeue({ tenantId: "tenant-a", operationId: "operation-a" });
@@ -67,8 +74,38 @@ describe("ProviderOperationRetryService", () => {
     expect(mocks.updateOperation).not.toHaveBeenCalled();
     expect(mocks.createJob).not.toHaveBeenCalled();
   });
+  it.each([
+    ["another tenant", { tenantId: "tenant-b" }],
+    ["another job type", { type: "provider.operation.cancel" }],
+    ["another operation payload", { payload: { operationId: "operation-b" } }]
+  ])("refuses to treat a retry generation belonging to %s as a duplicate", async (_label, changed) => {
+    mocks.findOperation.mockResolvedValue({ ...operation, status: ProviderOperationStatus.PENDING });
+    mocks.findRetryGeneration.mockResolvedValue({
+      id: "job-retry-a",
+      tenantId: "tenant-a",
+      type: "provider.operation.execute",
+      payload: { operationId: "operation-a" },
+      idempotencyKey: "provider-operation:operation-a:retry:2",
+      status: JobStatus.QUEUED,
+      ...changed
+    });
+
+    await expect(
+      makeService().requeue({ tenantId: "tenant-a", operationId: "operation-a" })
+    ).rejects.toThrow(/does not match this provider operation/);
+    expect(mocks.updateOperation).not.toHaveBeenCalled();
+    expect(mocks.createJob).not.toHaveBeenCalled();
+  });
+
   it("requires reconciliation when the prior retry generation is terminal", async () => {
-    const terminalJob = { id: "job-retry-a", status: JobStatus.FAILED };
+    const terminalJob = {
+      id: "job-retry-a",
+      tenantId: "tenant-a",
+      type: "provider.operation.execute",
+      payload: { operationId: "operation-a" },
+      idempotencyKey: "provider-operation:operation-a:retry:2",
+      status: JobStatus.FAILED
+    };
     mocks.findOperation.mockResolvedValue({ ...operation, status: ProviderOperationStatus.PENDING });
     mocks.findRetryGeneration.mockResolvedValue(terminalJob);
 

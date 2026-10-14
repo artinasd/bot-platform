@@ -40,6 +40,20 @@ export class ProviderOperationRetryService {
           where: { idempotencyKey: "provider-operation:" + operation.id + ":retry:" + operation.attempts }
         });
         if (previousRetry) {
+          const payload = previousRetry.payload;
+          const belongsToOperation =
+            previousRetry.tenantId === operation.tenantId &&
+            previousRetry.type === PROVIDER_OPERATION_JOB_TYPE &&
+            previousRetry.idempotencyKey === "provider-operation:" + operation.id + ":retry:" + operation.attempts &&
+            typeof payload === "object" &&
+            payload !== null &&
+            !Array.isArray(payload) &&
+            "operationId" in payload &&
+            payload.operationId === operation.id;
+
+          if (!belongsToOperation) {
+            throw new Error("The previous retry generation does not match this provider operation; reconcile before requeueing.");
+          }
           if (ACTIVE_JOB_STATUSES.includes(previousRetry.status)) {
             return { operation, job: previousRetry, duplicate: true };
           }
