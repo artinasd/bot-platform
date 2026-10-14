@@ -91,4 +91,45 @@ describe("order service input validation", () => {
       items: [{ productId: "product-a", planId: "plan-from-tenant-b", quantity: 1 }]
     })).rejects.toThrow(/plan is unavailable for this product/i);
   });
+  
+  it("returns the existing order for a same-customer idempotent retry", async () => {
+    const existingOrder = { id: "order-a", tenantId: "tenant-a", customerId: "customer-a", idempotencyKey: "retry-key" };
+    const existingItems = [{ id: "item-a", orderId: "order-a" }];
+    const db = {
+      order: { findFirst: async () => existingOrder },
+      orderItem: { findMany: async () => existingItems }
+    };
+    const service = new OrderService(db as never);
+
+    await expect(service.create({
+      tenantId: "tenant-a",
+      customerId: "customer-a",
+      idempotencyKey: "retry-key",
+      items: [{ productId: "product-a", quantity: 1 }]
+    })).resolves.toEqual({
+      order: { ...existingOrder, items: existingItems },
+      duplicate: true
+    });
+  });
+
+  it("rejects reuse of an idempotency key by a different customer", async () => {
+    const existingOrder = { id: "order-a", tenantId: "tenant-a", customerId: "customer-a", idempotencyKey: "retry-key" };
+    const orderItemFindMany = async () => [];
+    const db = {
+      order: { findFirst: async () => existingOrder },
+      orderItem: { findMany: orderItemFindMany },
+      $transaction: async () => {
+        throw new Error("Transaction should not start for a conflicting idempotency key.");
+      }
+    };
+    const service = new OrderService(db as never);
+
+    await expect(service.create({
+      tenantId: "tenant-a",
+      customerId: "customer-b",
+      idempotencyKey: "retry-key",
+      items: [{ productId: "product-a", quantity: 1 }]
+    })).rejects.toThrow(/already associated with another customer/i);
+  });
+
 });
