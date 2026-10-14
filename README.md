@@ -91,6 +91,10 @@ createTenantClient is intended as a defense-in-depth query scoping helper. It is
 GitHub Actions runs Prisma validation/generation, TypeScript checks, ESLint, unit tests, and a production build. A green workflow is required before treating a commit as verified.
 
 
+## Internal job-dispatch authentication
+
+`isValidInternalJobAuthorization` validates an exact `Bearer` authorization header against `INTERNAL_JOB_SECRET`, requires a configured secret of at least 32 characters, and compares fixed-size SHA-256 digests with a constant-time comparison. The helper fails closed when configuration is missing or weak. It is only an authentication primitive; there is not yet an HTTP dispatch endpoint or registered production handler set.
+
 ## Provider-operation recovery sweep
 
 `ProviderOperationRecoveryService` provides a bounded maintenance sweep for stale provider operations. It scans at most 500 tenants per call by default, considers only operations still marked `RUNNING` for at least five minutes, and transitions those operations to `UNKNOWN` through the tenant-scoped provider-operation service. It deliberately does not retry the provider action or decide whether it succeeded. Run it from a trusted scheduler/maintenance worker, then reconcile each unknown outcome against the provider before any retry. The sweep is not wired to an HTTP endpoint or automatically scheduled.
