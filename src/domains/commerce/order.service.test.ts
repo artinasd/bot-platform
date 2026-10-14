@@ -153,4 +153,25 @@ describe("order service input validation", () => {
     expect(findFirst).not.toHaveBeenCalled();
   });
 
+
+  it("loads order items only within the order's tenant and ID", async () => {
+    const order = { id: "order-a", tenantId: "tenant-a" };
+    const items = [{ id: "item-a", orderId: "order-a", tenantId: "tenant-a" }];
+    const orderFindFirst = vi.fn(async () => order);
+    const itemFindMany = vi.fn(async () => items);
+    const service = new OrderService({
+      order: { findFirst: orderFindFirst },
+      orderItem: { findMany: itemFindMany }
+    } as never);
+
+    await expect(service.getById("tenant-a", "order-a")).resolves.toEqual({ ...order, items });
+    expect(orderFindFirst).toHaveBeenCalledWith({
+      where: { id: "order-a", tenantId: "tenant-a" }
+    });
+    expect(itemFindMany).toHaveBeenCalledWith({
+      where: { tenantId: "tenant-a", orderId: "order-a" },
+      orderBy: { createdAt: "asc" }
+    });
+  });
+
 });
