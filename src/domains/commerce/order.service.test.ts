@@ -70,4 +70,25 @@ describe("order service input validation", () => {
       items: [{ productId: "product-from-tenant-b", quantity: 1 }]
     })).rejects.toThrow(/product is unavailable in this tenant/i);
   });
+
+  it("rejects a plan that is not attached to the requested tenant's product", async () => {
+    const tx = {
+      tenant: { findFirst: async () => ({ id: "tenant-a" }) },
+      customer: { findFirst: async () => ({ id: "customer-a" }) },
+      product: { findFirst: async () => ({ id: "product-a", priceMinor: 100n, currency: "IRR" }) },
+      plan: { findFirst: async () => null }
+    };
+    const db = {
+      order: { findFirst: async () => null },
+      $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx)
+    };
+    const service = new OrderService(db as never);
+
+    await expect(service.create({
+      tenantId: "tenant-a",
+      customerId: "customer-a",
+      idempotencyKey: "cross-tenant-plan",
+      items: [{ productId: "product-a", planId: "plan-from-tenant-b", quantity: 1 }]
+    })).rejects.toThrow(/plan is unavailable for this product/i);
+  });
 });
