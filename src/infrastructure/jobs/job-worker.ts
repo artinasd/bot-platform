@@ -62,7 +62,7 @@ export class JobWorker {
     const job = await this.queue.claimNext(this.workerId, this.clock());
     if (!job) return { status: "idle" };
 
-    const handler = this.handlers[job.type];
+    const handler = Object.hasOwn(this.handlers, job.type) ? this.handlers[job.type] : undefined;
     if (!handler) {
       const result = await this.queue.markFailed(
         job.id,

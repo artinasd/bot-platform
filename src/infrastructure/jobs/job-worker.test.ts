@@ -132,6 +132,21 @@ describe("durable job worker", () => {
     expect(mocks.handler).not.toHaveBeenCalled();
   });
 
+
+  it("does not treat inherited object properties as registered job handlers", async () => {
+    mocks.claimNext.mockResolvedValue({ ...job, type: "toString" });
+
+    await expect(makeWorker().runNext()).resolves.toEqual({ status: "failed", jobId: "job-a" });
+    expect(mocks.handler).not.toHaveBeenCalled();
+    expect(mocks.markFailed).toHaveBeenCalledWith(
+      "job-a",
+      "worker-a",
+      { code: "UNKNOWN_JOB_TYPE", message: 'No handler is registered for job type "toString".' },
+      undefined,
+      new Date("2026-10-14T10:00:00.000Z")
+    );
+  });
+
   it("reports lease loss rather than claiming success after ownership expires", async () => {
     mocks.markSucceeded.mockResolvedValue({ count: 0 });
 
