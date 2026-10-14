@@ -1,0 +1,970 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+  CLOSED
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ProductType {
+  VPN
+  DIGITAL
+  VIRTUAL_GOOD
+  CONSUMPTION
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAYMENT_PROCESSING
+  PAID
+  FULFILLMENT_PENDING
+  PROVISIONING
+  FULFILLED
+  DELIVERY_PENDING
+  DELIVERED
+  FAILED_RETRYABLE
+  FAILED_PERMANENT
+  CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  AWAITING_ACTION
+  SUBMITTED
+  VERIFYING
+  CONFIRMED
+  REJECTED
+  EXPIRED
+  CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  DISPUTED
+}
+
+enum SubscriptionStatus {
+  PENDING
+  PROVISIONING
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  CANCELLED
+  MIGRATING
+  FAILED
+  EXTERNALLY_DELETED
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  RETRY_WAIT
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum ProviderOperationStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  RETRYABLE_FAILURE
+  PERMANENT_FAILURE
+  UNKNOWN
+}
+
+enum LedgerEntryType {
+  DEBIT
+  CREDIT
+  PAYMENT
+  REFUND
+  CASHBACK
+  COMMISSION
+  FEE
+  EXPENSE
+  ADJUSTMENT
+  SETTLEMENT
+}
+
+enum StaffRole {
+  OWNER
+  ADMINISTRATOR
+  FINANCE
+  SUPPORT
+  OPERATOR
+  MARKETING
+  RESELLER_MANAGER
+  READONLY
+}
+
+model Tenant {
+  id                String   @id @default(cuid())
+  slug              String   @unique
+  name              String
+  status            TenantStatus @default(PENDING)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  settings          TenantSettings?
+  branding          TenantBranding?
+  domains           Domain[]
+  telegramBots      TelegramBot[]
+  users             User[]
+  staffMembers      StaffMember[]
+  customers         Customer[]
+  customerGroups    CustomerGroup[]
+  resellers         Reseller[]
+  partners          Partner[]
+  products          Product[]
+  plans             Plan[]
+  locations         Location[]
+  vpnServers        VPNServer[]
+  vpnPanels         VPNPanel[]
+  providerConnections ProviderConnection[]
+  subscriptions     Subscription[]
+  subscriptionConfigurations SubscriptionConfiguration[]
+  orders            Order[]
+  orderItems        OrderItem[]
+  payments          Payment[]
+  paymentAttempts   PaymentAttempt[]
+  paymentMethods    PaymentMethod[]
+  wallets           Wallet[]
+  walletTransactions WalletTransaction[]
+  refunds           Refund[]
+  coupons           Coupon[]
+  campaigns         Campaign[]
+  referrals         Referral[]
+  cashbacks         Cashback[]
+  commissions       Commission[]
+  invoices          Invoice[]
+  expenses          Expense[]
+  accountingPeriods AccountingPeriod[]
+  supportTickets    SupportTicket[]
+  supportMessages   SupportMessage[]
+  broadcasts        Broadcast[]
+  notifications     Notification[]
+  jobs              Job[]
+  events             Event[]
+  auditLogs          AuditLog[]
+  migrationJobs      MigrationJob[]
+  migrationRecords   MigrationRecord[]
+  providerOperations ProviderOperation[]
+  ledgerEntries      LedgerEntry[]
+  permissions        Permission[]
+  roles              Role[]
+  staffInvitations   StaffInvitation[]
+  featureFlags       FeatureFlag[]
+  trialRules         TrialRule[]
+  customerTags       CustomerTag[]
+  @@index([status, createdAt])
+}
+
+model TenantSettings {
+  id        String   @id @default(cuid())
+  tenantId  String   @unique
+  locale    String   @default("fa-IR")
+  currency  String   @default("IRR")
+  timezone  String   @default("Asia/Tehran")
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model TenantBranding {
+  id        String   @id @default(cuid())
+  tenantId  String   @unique
+  name      String
+  logoUrl   String?
+  colors    Json     @default("{}")
+  messages  Json     @default("{}")
+  theme     Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model Domain {
+  id                String   @id @default(cuid())
+  tenantId           String
+  hostname           String   @unique
+  verifiedAt         DateTime?
+  tlsStatus          String   @default("pending")
+  isPrimary          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, isPrimary])
+}
+
+model TelegramBot {
+  id                  String   @id @default(cuid())
+  tenantId             String
+  name                 String
+  tokenCiphertext      String
+  tokenHash            String   @unique
+  webhookSecretHash    String
+  enabled              Boolean  @default(true)
+  lastUpdateAt         DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, enabled])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  tenantId       String?
+  email          String?
+  phone          String?
+  passwordHash   String?
+  displayName    String?
+  status         RecordStatus @default(ACTIVE)
+  lastLoginAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, email])
+  @@index([tenantId, status])
+}
+
+model StaffMember {
+  id          String   @id @default(cuid())
+  tenantId    String
+  userId      String
+  role        StaffRole
+  status      RecordStatus @default(ACTIVE)
+  permissions String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, userId])
+  @@index([tenantId, role, status])
+}
+
+model Customer {
+  id              String   @id @default(cuid())
+  tenantId        String
+  userId          String?
+  telegramId      String?
+  username        String?
+  phone           String?
+  displayName     String?
+  adminNote       String?
+  status          RecordStatus @default(ACTIVE)
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, telegramId])
+  @@index([tenantId, username])
+  @@index([tenantId, phone])
+}
+
+model CustomerGroup {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  tags        String[] @default([])
+  pricing     Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, name])
+}
+
+model Reseller {
+  id             String   @id @default(cuid())
+  tenantId       String
+  customerId     String?
+  name           String
+  status         RecordStatus @default(ACTIVE)
+  priceRules     Json     @default("{}")
+  creditLimit    BigInt   @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, status])
+}
+
+model Partner {
+  id            String   @id @default(cuid())
+  tenantId      String
+  name          String
+  trackingCode  String
+  commissionBps Int      @default(0)
+  status        RecordStatus @default(ACTIVE)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, trackingCode])
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  tenantId      String
+  slug          String
+  name          String
+  description   String?
+  type          ProductType
+  status        RecordStatus @default(ACTIVE)
+  priceMinor    BigInt
+  currency      String   @default("IRR")
+  config        Json     @default("{}")
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, slug])
+  @@index([tenantId, type, status])
+}
+
+model Plan {
+  id              String   @id @default(cuid())
+  tenantId        String
+  productId       String
+  slug            String
+  name            String
+  priceMinor      BigInt
+  currency        String   @default("IRR")
+  durationSeconds Int?
+  trafficBytes    BigInt?
+  unlimitedTraffic Boolean @default(false)
+  deviceLimit     Int?
+  connectionLimit Int?
+  configuration   Json     @default("{}")
+  status          RecordStatus @default(ACTIVE)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, slug])
+  @@index([tenantId, productId, status])
+}
+
+model Location {
+  id          String   @id @default(cuid())
+  tenantId    String
+  slug        String
+  name        String
+  countryCode String?
+  priority    Int      @default(100)
+  status      RecordStatus @default(ACTIVE)
+  config      Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, slug])
+  @@index([tenantId, status, priority])
+}
+
+model VPNPanel {
+  id             String   @id @default(cuid())
+  tenantId       String
+  name           String
+  providerType   String
+  baseUrl        String
+  credentialCiphertext String
+  priority       Int      @default(100)
+  status         RecordStatus @default(ACTIVE)
+  capabilities   Json     @default("{}")
+  lastHealthAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, status, priority])
+}
+
+model VPNServer {
+  id           String   @id @default(cuid())
+  tenantId     String
+  panelId      String
+  locationId   String?
+  name         String
+  address      String?
+  capacity     Int?
+  status       RecordStatus @default(ACTIVE)
+  health       Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, panelId, status])
+}
+
+model ProviderConnection {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  name               String
+  providerType       String
+  credentialCiphertext String
+  status             RecordStatus @default(ACTIVE)
+  config             Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, providerType, status])
+}
+
+model Subscription {
+  id             String   @id @default(cuid())
+  tenantId       String
+  customerId     String
+  orderId        String?
+  productId      String
+  planId         String?
+  name           String
+  status         SubscriptionStatus @default(PENDING)
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  trafficLimitBytes BigInt?
+  trafficUsedBytes BigInt @default(0)
+  accessUrlCiphertext String?
+  providerRef    String?
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, customerId, status])
+  @@index([tenantId, expiresAt])
+}
+
+model SubscriptionConfiguration {
+  id             String   @id @default(cuid())
+  tenantId       String
+  subscriptionId String
+  label          String
+  providerRef    String?
+  accessUrlCiphertext String?
+  configuration  Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, subscriptionId])
+}
+
+model Order {
+  id             String   @id @default(cuid())
+  tenantId       String
+  customerId     String
+  orderNumber    String
+  status         OrderStatus @default(DRAFT)
+  subtotalMinor  BigInt
+  discountMinor  BigInt @default(0)
+  totalMinor     BigInt
+  currency       String   @default("IRR")
+  idempotencyKey String
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, orderNumber])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, customerId, createdAt])
+  @@index([tenantId, status, createdAt])
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  tenantId        String
+  orderId         String
+  productId       String
+  planId          String?
+  quantity        Int      @default(1)
+  unitPriceMinor  BigInt
+  totalPriceMinor BigInt
+  configuration   Json     @default("{}")
+  createdAt       DateTime @default(now())
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, orderId])
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  tenantId       String
+  orderId        String
+  status         PaymentStatus @default(PENDING)
+  amountMinor    BigInt
+  currency       String   @default("IRR")
+  idempotencyKey String
+  provider       String
+  providerRef    String?
+  metadata       Json     @default("{}")
+  confirmedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, orderId, status])
+}
+
+model PaymentAttempt {
+  id             String   @id @default(cuid())
+  tenantId       String
+  paymentId      String
+  attemptNumber  Int
+  status         PaymentStatus @default(PENDING)
+  requestData    Json     @default("{}")
+  responseData   Json     @default("{}")
+  errorCode      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, paymentId, attemptNumber])
+}
+
+model PaymentMethod {
+  id            String   @id @default(cuid())
+  tenantId      String
+  name          String
+  methodType    String
+  instructions  String?
+  config        Json     @default("{}")
+  priority      Int      @default(100)
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, enabled, priority])
+}
+
+model Wallet {
+  id            String   @id @default(cuid())
+  tenantId      String
+  ownerType     String
+  ownerId       String
+  currency      String   @default("IRR")
+  balanceMinor  BigInt   @default(0)
+  status        RecordStatus @default(ACTIVE)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, ownerType, ownerId, currency])
+}
+
+model WalletTransaction {
+  id              String   @id @default(cuid())
+  tenantId        String
+  walletId        String
+  type            LedgerEntryType
+  amountMinor     BigInt
+  currency        String   @default("IRR")
+  idempotencyKey  String
+  referenceType   String?
+  referenceId     String?
+  description     String?
+  createdAt       DateTime @default(now())
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, walletId, createdAt])
+}
+
+model Refund {
+  id              String   @id @default(cuid())
+  tenantId        String
+  paymentId       String
+  amountMinor     BigInt
+  currency        String   @default("IRR")
+  status          String   @default("pending")
+  idempotencyKey  String
+  reason          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, paymentId, status])
+}
+
+model Coupon {
+  id             String   @id @default(cuid())
+  tenantId       String
+  code           String
+  discountType   String
+  discountValue  BigInt
+  currency       String?
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  usageLimit     Int?
+  usageCount     Int      @default(0)
+  rules          Json     @default("{}")
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, code])
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  status      RecordStatus @default(ACTIVE)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  rules       Json     @default("{}")
+  metrics     Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, status, startsAt, endsAt])
+}
+
+model Referral {
+  id            String   @id @default(cuid())
+  tenantId      String
+  referrerId    String
+  referredId    String
+  code          String
+  status        String   @default("pending")
+  rewardMinor   BigInt   @default(0)
+  createdAt     DateTime @default(now())
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, referredId])
+  @@index([tenantId, referrerId])
+}
+
+model Cashback {
+  id             String   @id @default(cuid())
+  tenantId       String
+  customerId     String
+  sourceType     String
+  sourceId       String
+  amountMinor    BigInt
+  currency       String   @default("IRR")
+  idempotencyKey String
+  createdAt      DateTime @default(now())
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, idempotencyKey])
+}
+
+model Commission {
+  id             String   @id @default(cuid())
+  tenantId       String
+  partnerId      String?
+  resellerId     String?
+  orderId        String?
+  amountMinor    BigInt
+  currency       String   @default("IRR")
+  status         String   @default("pending")
+  idempotencyKey String
+  createdAt      DateTime @default(now())
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, createdAt])
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  tenantId      String
+  orderId       String?
+  invoiceNumber String
+  amountMinor   BigInt
+  currency      String   @default("IRR")
+  status        String   @default("issued")
+  issuedAt      DateTime @default(now())
+  dueAt         DateTime?
+  metadata      Json     @default("{}")
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, invoiceNumber])
+}
+
+model Expense {
+  id           String   @id @default(cuid())
+  tenantId     String
+  category     String
+  description  String?
+  amountMinor  BigInt
+  currency     String   @default("IRR")
+  occurredAt   DateTime @default(now())
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now())
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, occurredAt])
+}
+
+model AccountingPeriod {
+  id         String   @id @default(cuid())
+  tenantId   String
+  startsAt   DateTime
+  endsAt     DateTime
+  lockedAt   DateTime?
+  lockedBy   String?
+  summary    Json     @default("{}")
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, startsAt, endsAt])
+}
+
+model SupportTicket {
+  id          String   @id @default(cuid())
+  tenantId    String
+  customerId  String?
+  assignedTo  String?
+  subject     String
+  status      String   @default("open")
+  priority    String   @default("normal")
+  slaDueAt    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, status, priority, createdAt])
+}
+
+model SupportMessage {
+  id          String   @id @default(cuid())
+  tenantId    String
+  ticketId    String
+  senderType  String
+  senderId    String?
+  body        String
+  attachments Json     @default("[]")
+  internal    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, ticketId, createdAt])
+}
+
+model Broadcast {
+  id            String   @id @default(cuid())
+  tenantId      String
+  name          String
+  status        String   @default("draft")
+  audience      Json     @default("{}")
+  content       Json     @default("{}")
+  scheduledAt   DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  deliveryStats Json    @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, status, scheduledAt])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  tenantId    String
+  recipientId String?
+  channel     String
+  category    String
+  payload     Json
+  status      String   @default("queued")
+  attempts    Int      @default(0)
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, status, createdAt])
+}
+
+model Job {
+  id             String   @id @default(cuid())
+  tenantId       String?
+  type           String
+  status         JobStatus @default(QUEUED)
+  payload        Json
+  idempotencyKey String   @unique
+  correlationId  String
+  attempts       Int      @default(0)
+  maxAttempts    Int      @default(8)
+  runAt          DateTime @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
+  lastErrorCode  String?
+  lastError      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([status, runAt])
+  @@index([tenantId, status, runAt])
+}
+
+model Event {
+  id            String   @id @default(cuid())
+  tenantId      String?
+  type          String
+  aggregateType String
+  aggregateId   String
+  payload       Json
+  correlationId String
+  occurredAt    DateTime @default(now())
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, aggregateType, aggregateId, occurredAt])
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  tenantId      String?
+  actorType     String
+  actorId       String?
+  action        String
+  resourceType  String
+  resourceId    String?
+  previousState Json?
+  newState      Json?
+  source        String
+  correlationId String
+  createdAt     DateTime @default(now())
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model MigrationJob {
+  id           String   @id @default(cuid())
+  tenantId     String
+  source       String
+  status       JobStatus @default(QUEUED)
+  dryRun       Boolean  @default(true)
+  mapping      Json     @default("{}")
+  summary      Json     @default("{}")
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, status, createdAt])
+}
+
+model MigrationRecord {
+  id            String   @id @default(cuid())
+  tenantId      String
+  migrationJobId String
+  entityType    String
+  sourceId      String
+  targetId      String?
+  status        String   @default("pending")
+  error         String?
+  sourceHash    String?
+  createdAt     DateTime @default(now())
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, migrationJobId, entityType, sourceId])
+  @@index([tenantId, migrationJobId, status])
+}
+
+model ProviderOperation {
+  id              String   @id @default(cuid())
+  tenantId        String
+  orderId         String
+  itemId          String
+  action          String
+  idempotencyKey  String
+  status          ProviderOperationStatus @default(PENDING)
+  requestPayload  Json     @default("{}")
+  responsePayload Json     @default("{}")
+  attempts        Int      @default(0)
+  lastError       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, updatedAt])
+}
+
+model LedgerEntry {
+  id             String   @id @default(cuid())
+  tenantId       String
+  walletId       String?
+  entryType      LedgerEntryType
+  amountMinor    BigInt
+  currency       String   @default("IRR")
+  referenceType  String?
+  referenceId    String?
+  idempotencyKey String
+  description    String?
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now())
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, walletId, createdAt])
+  @@index([tenantId, referenceType, referenceId])
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  key         String
+  description String?
+  createdAt   DateTime @default(now())
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, key])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  name        String
+  capabilities String[] @default([])
+  systemRole  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, name])
+}
+
+model StaffInvitation {
+  id          String   @id @default(cuid())
+  tenantId    String
+  email       String
+  tokenHash   String   @unique
+  role        StaffRole
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, email, expiresAt])
+}
+
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  key         String
+  enabled     Boolean  @default(false)
+  scope       String   @default("tenant")
+  config      Json     @default("{}")
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, key, scope])
+}
+
+model TrialRule {
+  id              String   @id @default(cuid())
+  tenantId        String
+  name            String
+  enabled         Boolean  @default(true)
+  trafficLimitBytes BigInt?
+  durationSeconds Int?
+  deviceLimit     Int?
+  connectionLimit Int?
+  cooldownSeconds Int      @default(0)
+  dailyLimit      Int?
+  conditions      Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, enabled])
+}
+
+model CustomerTag {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  color       String?
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, name])
+}
