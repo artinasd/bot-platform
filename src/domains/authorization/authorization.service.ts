@@ -39,6 +39,15 @@ export type AuthorizationResource = {
   tenantStatus: TenantStatus;
 };
 
+const KNOWN_CAPABILITIES = new Set<Capability>([
+  "tenant:read", "tenant:update", "staff:read", "staff:manage",
+  "catalog:read", "catalog:write", "orders:read", "orders:manage",
+  "payments:read", "payments:verify", "wallet:read", "wallet:manage",
+  "subscriptions:read", "subscriptions:manage", "customers:read", "customers:manage",
+  "support:read", "support:manage", "marketing:manage", "resellers:manage",
+  "accounting:read", "accounting:manage", "reports:read", "audit:read", "settings:manage"
+]);
+
 const roleCapabilities: Record<StaffRole, readonly Capability[]> = {
   OWNER: [
     "tenant:read", "tenant:update", "staff:read", "staff:manage",
@@ -91,10 +100,18 @@ export function assertTenantAccess(actor: AuthorizationActor, resource: Authoriz
 }
 
 export function hasCapability(actor: AuthorizationActor, capability: Capability): boolean {
-  const granted = new Set<string>([
-    ...roleCapabilities[actor.role],
-    ...(actor.explicitPermissions ?? [])
-  ]);
+  if (!KNOWN_CAPABILITIES.has(capability)) return false;
+
+  const roleGrants = roleCapabilities[actor.role];
+  if (!roleGrants) return false;
+
+  const granted = new Set<Capability>(roleGrants);
+  for (const permission of actor.explicitPermissions ?? []) {
+    if (KNOWN_CAPABILITIES.has(permission as Capability)) {
+      granted.add(permission as Capability);
+    }
+  }
+
   return granted.has(capability);
 }
 
