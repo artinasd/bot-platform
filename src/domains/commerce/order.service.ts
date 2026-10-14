@@ -30,6 +30,9 @@ export class OrderService {
       where: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey }
     });
     if (existing) {
+      if (existing.customerId !== input.customerId) {
+        throw new Error("Idempotency key is already associated with another customer.");
+      }
       const items = await this.db.orderItem.findMany({
         where: { tenantId: input.tenantId, orderId: existing.id },
         orderBy: { createdAt: "asc" }
@@ -139,6 +142,9 @@ export class OrderService {
           where: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey }
         });
         if (existingOrder) {
+          if (existingOrder.customerId !== input.customerId) {
+            throw new Error("Idempotency key is already associated with another customer.");
+          }
           const items = await this.db.orderItem.findMany({
             where: { tenantId: input.tenantId, orderId: existingOrder.id },
             orderBy: { createdAt: "asc" }
