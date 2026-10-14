@@ -5,6 +5,7 @@ import { JobQueue } from "./job-queue";
 const mocks = vi.hoisted(() => ({
   jobUpsert: vi.fn(),
   queryRaw: vi.fn(),
+  executeRaw: vi.fn(),
   jobUpdateMany: vi.fn(),
   jobFindUnique: vi.fn(),
   jobFindFirst: vi.fn(),
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 function makeQueue() {
   const tx = {
     $queryRaw: mocks.queryRaw,
+    $executeRaw: mocks.executeRaw,
     job: { updateMany: mocks.jobUpdateMany, findUnique: mocks.jobFindUnique }
   };
   const db = {
@@ -101,6 +103,21 @@ describe("durable job queue", () => {
 
     await expect(queue.claimNext("worker-a", new Date("2026-10-14T10:00:00.000Z"))).resolves.toBeNull();
     expect(mocks.jobUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("recovers expired worker leases and fails jobs whose attempts are exhausted", async () => {
+    mocks.queryRaw.mockResolvedValue([]);
+    const queue = makeQueue();
+    const now = new Date("2026-10-14T10:00:00.000Z");
+
+    await expect(queue.claimNext("worker-a", now)).resolves.toBeNull();
+
+    expect(mocks.executeRaw).toHaveBeenCalledTimes(1);
+    const [sql, recoveryTime, staleBefore] = mocks.executeRaw.mock.calls[0] as [TemplateStringsArray, Date, Date];
+    expect(sql.join(" ")).toContain("WHEN \"attempts\" >= \"maxAttempts\" THEN 'FAILED'::\"JobStatus\"");
+    expect(sql.join(" ")).toContain("'WORKER_LEASE_EXPIRED'");
+    expect(recoveryTime).toEqual(now);
+    expect(staleBefore).toEqual(new Date("2026-10-14T09:55:00.000Z"));
   });
 
   it("claims one available job and increments its attempt count", async () => {
