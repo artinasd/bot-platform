@@ -67,6 +67,10 @@ Never commit real credentials. Rotate any credential accidentally committed to r
 
 The queue can lease one due job at a time through `JobQueue.claimNext`. `JobWorker` dispatches only explicitly registered job types and reports success or failure only while the worker still owns a live lease. Handlers may throw `RetryableJobError` only when they know retrying is safe; retry delays use bounded exponential backoff. Unclassified exceptions are treated as uncertain outcomes and are not automatically retried, because an external side effect may already have happened. Unknown job types fail closed. This is an execution primitive, not a deployed scheduler or a provider integration; no external jobs are run by this change.
 
+## Provider-operation job handler
+
+`createProviderOperationJobHandler` accepts jobs whose payload contains an `operationId` and whose `tenantId` is set. It claims the tenant-scoped operation before calling an injected provider executor and records the response on success. Duplicate delivery of an already successful operation is a no-op; an `UNKNOWN` operation is blocked until explicit reconciliation. Unclassified executor errors become `UNKNOWN`. Provider adapters may throw `ProviderOperationExecutionError` with `RETRYABLE_FAILURE` only when they can establish that retrying is safe, and should use the durable operation idempotency key with providers that support it. This bridge does not implement a provider API, scheduler, or dispatch endpoint.
+
 ## Architecture guardrails
 
 - PostgreSQL is the source of truth for orders, payments, wallets, subscriptions, and tenant data.
