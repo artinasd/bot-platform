@@ -67,6 +67,19 @@ VALUES
   ('server-fk-a', 'tenant-fk-a', 'panel-fk-a', 'location-fk-a', 'Server A', CURRENT_TIMESTAMP),
   ('server-fk-b', 'tenant-fk-b', 'panel-fk-b', 'location-fk-b', 'Server B', CURRENT_TIMESTAMP);
 
+INSERT INTO "MigrationJob" ("id", "tenantId", "source", "updatedAt")
+VALUES
+  ('migration-job-fk-a', 'tenant-fk-a', 'test', CURRENT_TIMESTAMP),
+  ('migration-job-fk-b', 'tenant-fk-b', 'test', CURRENT_TIMESTAMP);
+
+INSERT INTO "MigrationRecord" ("id", "tenantId", "migrationJobId", "entityType", "sourceId")
+VALUES ('migration-record-fk-a', 'tenant-fk-a', 'migration-job-fk-a', 'customer', 'source-a');
+
+INSERT INTO "ProviderOperation" ("id", "tenantId", "orderId", "itemId", "action", "idempotencyKey", "updatedAt")
+VALUES
+  ('provider-op-fk-a', 'tenant-fk-a', 'order-fk-a', 'item-fk-a', 'provision', 'provider-op-fk-a', CURRENT_TIMESTAMP),
+  ('provider-op-fk-b', 'tenant-fk-b', 'order-fk-b', 'item-fk-b', 'provision', 'provider-op-fk-b', CURRENT_TIMESTAMP);
+
 INSERT INTO "SupportTicket" ("id", "tenantId", "customerId", "subject", "updatedAt")
 VALUES
   ('ticket-fk-a', 'tenant-fk-a', 'customer-fk-a', 'Ticket A', CURRENT_TIMESTAMP),
@@ -86,6 +99,30 @@ BEGIN
     INSERT INTO "VPNServer" ("id", "tenantId", "panelId", "locationId", "name", "updatedAt")
     VALUES ('server-fk-invalid-location', 'tenant-fk-a', 'panel-fk-a', 'location-fk-b', 'Invalid Location Server', CURRENT_TIMESTAMP);
     RAISE EXCEPTION 'Expected the database to reject a VPN server referencing another tenant location';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "ProviderOperation" ("id", "tenantId", "orderId", "itemId", "action", "idempotencyKey", "updatedAt")
+    VALUES ('provider-op-fk-invalid-order', 'tenant-fk-a', 'order-fk-b', 'item-fk-a', 'provision', 'provider-op-fk-invalid-order', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected the database to reject a provider operation referencing another tenant order';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "ProviderOperation" ("id", "tenantId", "orderId", "itemId", "action", "idempotencyKey", "updatedAt")
+    VALUES ('provider-op-fk-invalid-item', 'tenant-fk-a', 'order-fk-a', 'item-fk-b', 'provision', 'provider-op-fk-invalid-item', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected the database to reject a provider operation referencing another tenant order item';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "MigrationRecord" ("id", "tenantId", "migrationJobId", "entityType", "sourceId")
+    VALUES ('migration-record-fk-invalid-job', 'tenant-fk-a', 'migration-job-fk-b', 'customer', 'source-invalid');
+    RAISE EXCEPTION 'Expected the database to reject a migration record referencing another tenant migration job';
   EXCEPTION WHEN foreign_key_violation THEN
     NULL;
   END;
