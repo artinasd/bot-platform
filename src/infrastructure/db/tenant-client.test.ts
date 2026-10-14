@@ -181,4 +181,40 @@ describe("tenant-scoped Prisma client", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it("rejects unknown Prisma operations before running the query", async () => {
+    const handler = createHarness();
+    const query = vi.fn(async () => "should not run");
+
+    await expect(handler({
+      model: "Product",
+      operation: "rawQuery",
+      args: {},
+      query
+    })).rejects.toThrow(/unsupported Prisma operation/i);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("scopes bulk-return updates and forces tenant IDs on bulk-return creates", async () => {
+    const handler = createHarness();
+    const updateArgs: QueryArgs = { where: { status: "ACTIVE" }, data: { status: "PAUSED" } };
+    await handler({
+      model: "Product",
+      operation: "updateManyAndReturn",
+      args: updateArgs,
+      query: async (received) => received
+    });
+    expect(updateArgs.where).toEqual({
+      AND: [{ status: "ACTIVE" }, { tenantId: "tenant-a" }]
+    });
+
+    const createArgs: QueryArgs = { data: [{ tenantId: "tenant-b", name: "new" }] };
+    await handler({
+      model: "Product",
+      operation: "createManyAndReturn",
+      args: createArgs,
+      query: async (received) => received
+    });
+    expect(createArgs.data).toEqual([{ tenantId: "tenant-a", name: "new" }]);
+  });
+
 });
