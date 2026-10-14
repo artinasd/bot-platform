@@ -31,6 +31,18 @@ describe("provider operation request payload validator", () => {
     expect(() => validateProviderOperationRequestPayload(circular)).toThrow(/circular references/);
   });
 
+  it("rejects sparse arrays, extra array properties, and array accessors", () => {
+    const sparse = new Array(2);
+    expect(() => validateProviderOperationRequestPayload({ values: sparse })).toThrow(/holes or extra properties/);
+    const extra = ["safe"] as string[] & { extra?: string };
+    extra.extra = "ignored-by-JSON";
+    expect(() => validateProviderOperationRequestPayload({ values: extra })).toThrow(/holes or extra properties/);
+    const accessor: unknown[] = [];
+    Object.defineProperty(accessor, "0", { enumerable: true, get: () => "unsafe" });
+    accessor.length = 1;
+    expect(() => validateProviderOperationRequestPayload({ values: accessor })).toThrow(/data elements/);
+  });
+
   it("enforces string, array, object, nesting, and total-size limits", () => {
     expect(() => validateProviderOperationRequestPayload({ value: "x".repeat(4097) })).toThrow(/oversized string/);
     expect(() => validateProviderOperationRequestPayload({ values: Array(101).fill("x") })).toThrow(/oversized array/);

@@ -40,7 +40,21 @@ export function validateProviderOperationRequestPayload(value: unknown): Prisma.
     try {
       if (Array.isArray(current)) {
         if (current.length > MAX_ARRAY_LENGTH) throw new Error("Provider request payload contains an oversized array.");
-        return current.map((item) => normalize(item, depth + 1));
+        const keys = Reflect.ownKeys(current);
+        if (keys.length !== current.length + 1 || keys.some((key) =>
+          typeof key !== "string" || (key !== "length" && !/^(0|[1-9][0-9]*)$/.test(key))
+        )) {
+          throw new Error("Provider request payload arrays must not contain holes or extra properties.");
+        }
+        const normalized: NormalizedJsonValue[] = [];
+        for (let index = 0; index < current.length; index += 1) {
+          const descriptor = Object.getOwnPropertyDescriptor(current, String(index));
+          if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+            throw new Error("Provider request payload arrays must contain only data elements.");
+          }
+          normalized.push(normalize(descriptor.value, depth + 1));
+        }
+        return normalized;
       }
 
       const prototype = Object.getPrototypeOf(current);
