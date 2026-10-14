@@ -1,7 +1,7 @@
 import { JobStatus, Prisma, PrismaClient, ProviderOperationStatus } from "@prisma/client";
 import { PROVIDER_OPERATION_JOB_TYPE } from "./provider-operation-scheduling.service";
 
-const ACTIVE_JOB_STATUSES = [JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.RETRY_WAIT];
+const ACTIVE_JOB_STATUSES: JobStatus[] = [JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.RETRY_WAIT];
 const DEFAULT_MAX_OPERATION_ATTEMPTS = 8;
 
 export type RetryProviderOperationInput = {
