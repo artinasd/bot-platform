@@ -68,6 +68,25 @@ describe("provider operation service", () => {
     expect(mocks.operationFindFirst).not.toHaveBeenCalled();
   });
 
+  it("rejects malformed request payloads before database access", async () => {
+    const service = makeService();
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+
+    await expect(service.create({ ...input, requestPayload: null as never }))
+      .rejects.toThrow(/plain object/);
+    await expect(service.create({ ...input, requestPayload: { nested: circular } as never }))
+      .rejects.toThrow(/circular references/);
+    await expect(service.create({ ...input, requestPayload: { values: new Array(2) } as never }))
+      .rejects.toThrow(/holes or extra properties/);
+
+    expect(mocks.operationFindFirst).not.toHaveBeenCalled();
+    expect(mocks.providerConnectionFindFirst).not.toHaveBeenCalled();
+    expect(mocks.orderFindFirst).not.toHaveBeenCalled();
+    expect(mocks.itemFindFirst).not.toHaveBeenCalled();
+    expect(mocks.operationCreate).not.toHaveBeenCalled();
+  });
+
   it("creates an operation only after tenant-scoped order and item checks", async () => {
     const service = makeService();
     await expect(service.create(input)).resolves.toEqual({
