@@ -30,6 +30,20 @@ VALUES (
   100, 100, 'order-fk-a', CURRENT_TIMESTAMP
 );
 
+INSERT INTO "Order" (
+  "id", "tenantId", "customerId", "orderNumber", "subtotalMinor",
+  "totalMinor", "idempotencyKey", "updatedAt"
+)
+VALUES (
+  'order-fk-b', 'tenant-fk-b', 'customer-fk-b', 'order-fk-b',
+  100, 100, 'order-fk-b', CURRENT_TIMESTAMP
+);
+
+INSERT INTO "Payment" ("id", "tenantId", "orderId", "amountMinor", "idempotencyKey", "provider", "updatedAt")
+VALUES
+  ('payment-fk-a', 'tenant-fk-a', 'order-fk-a', 100, 'payment-fk-a', 'test', CURRENT_TIMESTAMP),
+  ('payment-fk-b', 'tenant-fk-b', 'order-fk-b', 100, 'payment-fk-b', 'test', CURRENT_TIMESTAMP);
+
 DO $$
 BEGIN
   BEGIN
@@ -77,6 +91,54 @@ BEGIN
       'product-fk-a', 'plan-fk-a2', 100, 100
     );
     RAISE EXCEPTION 'Expected the database to reject a plan that belongs to a different product';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "Payment" ("id", "tenantId", "orderId", "amountMinor", "idempotencyKey", "provider", "updatedAt")
+    VALUES ('payment-fk-invalid-order', 'tenant-fk-a', 'order-fk-b', 100, 'payment-fk-invalid-order', 'test', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected the database to reject a payment referencing another tenant order';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "PaymentAttempt" ("id", "tenantId", "paymentId", "attemptNumber", "updatedAt")
+    VALUES ('attempt-fk-invalid-payment', 'tenant-fk-a', 'payment-fk-b', 1, CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected the database to reject a payment attempt referencing another tenant payment';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "Refund" ("id", "tenantId", "paymentId", "amountMinor", "idempotencyKey", "updatedAt")
+    VALUES ('refund-fk-invalid-payment', 'tenant-fk-a', 'payment-fk-b', 100, 'refund-fk-invalid-payment', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected the database to reject a refund referencing another tenant payment';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "Invoice" ("id", "tenantId", "orderId", "invoiceNumber", "amountMinor")
+    VALUES ('invoice-fk-invalid-order', 'tenant-fk-a', 'order-fk-b', 'invoice-fk-invalid-order', 100);
+    RAISE EXCEPTION 'Expected the database to reject an invoice referencing another tenant order';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "Subscription" ("id", "tenantId", "customerId", "orderId", "productId", "planId", "name", "updatedAt")
+    VALUES ('subscription-fk-invalid-plan', 'tenant-fk-a', 'customer-fk-a', 'order-fk-a', 'product-fk-a', 'plan-fk-a2', 'Invalid Plan', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected the database to reject a subscription plan that belongs to another product';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "Subscription" ("id", "tenantId", "customerId", "orderId", "productId", "name", "updatedAt")
+    VALUES ('subscription-fk-invalid-order', 'tenant-fk-a', 'customer-fk-a', 'order-fk-b', 'product-fk-a', 'Invalid Order', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected the database to reject a subscription referencing another tenant order';
   EXCEPTION WHEN foreign_key_violation THEN
     NULL;
   END;
