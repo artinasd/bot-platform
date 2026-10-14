@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { OrderService } from "./order.service";
 
 describe("order service input validation", () => {
@@ -130,6 +130,27 @@ describe("order service input validation", () => {
       idempotencyKey: "retry-key",
       items: [{ productId: "product-a", quantity: 1 }]
     })).rejects.toThrow(/already associated with another customer/i);
+  });
+
+
+  it("scopes order retrieval to the requested tenant", async () => {
+    const findFirst = vi.fn(async () => null);
+    const db = { order: { findFirst } };
+    const service = new OrderService(db as never);
+
+    await expect(service.getById("tenant-b", "order-from-tenant-a")).resolves.toBeNull();
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { id: "order-from-tenant-a", tenantId: "tenant-b" }
+    });
+  });
+
+  it("rejects missing tenant or order identifiers before database access", async () => {
+    const findFirst = vi.fn();
+    const service = new OrderService({ order: { findFirst } } as never);
+
+    await expect(service.getById("", "order-a")).rejects.toThrow(/required/);
+    await expect(service.getById("tenant-a", " ")).rejects.toThrow(/required/);
+    expect(findFirst).not.toHaveBeenCalled();
   });
 
 });
