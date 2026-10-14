@@ -95,6 +95,30 @@ function addTenantToData(args: Record<string, unknown>, tenantId: string) {
   }
 }
 
+function rejectNestedRelationWrites(model: string, value: unknown) {
+  if (!value || typeof value !== "object") return;
+  const modelMetadata = Prisma.dmmf.datamodel.models.find((entry) => entry.name === model);
+  if (!modelMetadata) {
+    throw new Error(`Tenant-scoped client cannot validate relation metadata for model: ${model}.`);
+  }
+
+  const relationFields = new Set(
+    modelMetadata.fields.filter((field) => field.kind === "object").map((field) => field.name)
+  );
+  const rows = Array.isArray(value) ? value : [value];
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    for (const key of Object.keys(row)) {
+      if (relationFields.has(key)) {
+        throw new Error(
+          `Tenant-scoped client rejects nested relation writes through ${model}.`
+        );
+      }
+    }
+  }
+}
+
 export function createTenantClient(prisma: PrismaClient, tenantId: string) {
   if (!tenantId.trim()) {
     throw new Error("A non-empty tenant ID is required to create a tenant-scoped client.");
@@ -119,6 +143,17 @@ export function createTenantClient(prisma: PrismaClient, tenantId: string) {
             }
 
             const mutableArgs = args as Record<string, unknown>;
+
+            if (operation === "create") {
+              rejectNestedRelationWrites(model, mutableArgs.data);
+            }
+            if (operation === "update") {
+              rejectNestedRelationWrites(model, mutableArgs.data);
+            }
+            if (operation === "upsert") {
+              rejectNestedRelationWrites(model, mutableArgs.create);
+              rejectNestedRelationWrites(model, mutableArgs.update);
+            }
 
             if (READ_OPERATIONS.has(operation) || FILTERED_WRITE_OPERATIONS.has(operation)) {
               addTenantToWhere(mutableArgs, tenantId);
