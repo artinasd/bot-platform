@@ -29,9 +29,31 @@ function operationIdFromPayload(payload: Prisma.JsonValue): string {
     throw new Error("Provider-operation job payload must be an object.");
   }
 
-  const operationId = (payload as Record<string, Prisma.JsonValue>).operationId;
-  if (typeof operationId !== "string" || !operationId.trim()) {
-    throw new Error("Provider-operation job payload requires an operationId.");
+  const keys = Reflect.ownKeys(payload);
+  if (
+    Object.getPrototypeOf(payload) !== Object.prototype &&
+    Object.getPrototypeOf(payload) !== null
+  ) {
+    throw new Error("Provider-operation job payload must be a plain object.");
+  }
+  if (keys.length !== 1 || keys[0] !== "operationId") {
+    throw new Error("Provider-operation job payload must contain only operationId.");
+  }
+
+  const descriptor = Object.getOwnPropertyDescriptor(payload, "operationId");
+  if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+    throw new Error("Provider-operation job payload requires a data-field operationId.");
+  }
+
+  const operationId = descriptor.value as Prisma.JsonValue;
+  if (
+    typeof operationId !== "string" ||
+    !operationId.trim() ||
+    operationId !== operationId.trim() ||
+    operationId.length > 200 ||
+    /[\\u0000-\\u001f\\u007f]/.test(operationId)
+  ) {
+    throw new Error("Provider-operation job payload requires a valid operationId.");
   }
   return operationId;
 }

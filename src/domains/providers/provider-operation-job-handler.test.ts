@@ -199,6 +199,9 @@ describe("provider-operation job handler", () => {
   it("requires a tenant and an operation ID before claiming work", async () => {
     await expect(makeHandler()({ ...job, tenantId: null } as Job)).rejects.toThrow(/belong to a tenant/);
     await expect(makeHandler()({ ...job, payload: {} } as Job)).rejects.toThrow(/operationId/);
+    await expect(makeHandler()({ ...job, payload: { operationId: " operation-a " } } as Job)).rejects.toThrow(/valid operationId/);
+    await expect(makeHandler()({ ...job, payload: { operationId: "operation-a", tenantId: "tenant-b" } } as Job)).rejects.toThrow(/only operationId/);
+    await expect(makeHandler()({ ...job, payload: { operationId: "operation-a".repeat(30) } } as Job)).rejects.toThrow(/valid operationId/);
     expect(mocks.claim).not.toHaveBeenCalled();
   });
 
