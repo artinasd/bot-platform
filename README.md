@@ -103,3 +103,8 @@ GitHub Actions runs Prisma validation/generation, TypeScript checks, ESLint, uni
 ## Explicit job-handler registry
 
 `createJobHandlerRegistry` constructs a frozen registry from explicit `{ type, handler }` registrations. It rejects empty registries, blank/non-canonical types, non-callable handlers, and duplicate job types instead of silently overwriting a registration. The registry uses a null prototype, so inherited object properties cannot masquerade as handlers. This is a registration primitive only: it does not activate a scheduler, expose an HTTP endpoint, or claim queued work. A dispatch endpoint should not be enabled until real handlers and their dependencies are explicitly wired and readiness is checked before any job is claimed.
+
+
+## Provider-operation scheduling
+
+`ProviderOperationSchedulingService` creates or retrieves an idempotent tenant-scoped provider operation and ensures a durable `provider.operation.execute` job is present. The job payload contains only the operation ID; tenant ownership comes from the persisted operation and is checked again by the handler. Successful, unknown, and permanently failed operations are not scheduled for blind execution. The job uses the operation ID as a stable correlation ID so repeated requests cannot conflict because of caller-specific tracing IDs. The operation and job writes are not atomic; if enqueueing fails, repeating the same idempotent request can complete scheduling. This service does not supply a provider adapter or run jobs by itself.
