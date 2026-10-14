@@ -83,10 +83,30 @@ export class SessionService {
         userId: true,
         tenantId: true,
         expiresAt: true,
-        user: { select: { id: true, email: true, phone: true, displayName: true, status: true } }
+        user: { select: { id: true, email: true, phone: true, displayName: true, status: true, tenantId: true } }
       }
     });
     if (!session) return null;
+
+    if (session.tenantId && session.user.tenantId !== session.tenantId) {
+      const [staffMembership, customerMembership] = await Promise.all([
+        this.db.staffMember.findFirst({
+          where: { userId: session.userId, tenantId: session.tenantId, status: RecordStatus.ACTIVE },
+          select: { id: true }
+        }),
+        this.db.customer.findFirst({
+          where: { userId: session.userId, tenantId: session.tenantId, status: RecordStatus.ACTIVE },
+          select: { id: true }
+        })
+      ]);
+      if (!staffMembership && !customerMembership) {
+        await this.db.session.updateMany({
+          where: { id: session.id, revokedAt: null },
+          data: { revokedAt: new Date() }
+        });
+        return null;
+      }
+    }
 
     await this.db.session.updateMany({
       where: { id: session.id, revokedAt: null, expiresAt: { gt: new Date() } },
