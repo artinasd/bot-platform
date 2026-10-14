@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "sourceOfTruth": "Product requirements supplied for bot-platform",
+  "features": [
+    {"id":"foundation.config","name":"Application configuration","domain":"foundation","priority":"P0","dependencies":[],"implementationStatus":"partial","testStatus":"not_run","documentationStatus":"partial"},
+    {"id":"foundation.database","name":"Prisma PostgreSQL data model","domain":"foundation","priority":"P0","dependencies":["foundation.config"],"implementationStatus":"initial_schema_committed","testStatus":"not_run","documentationStatus":"partial"},
+    {"id":"foundation.cache","name":"Upstash Redis cache and session adapter","domain":"infrastructure","priority":"P0","dependencies":["foundation.config"],"implementationStatus":"initial_adapter_committed","testStatus":"tests_added_not_run","documentationStatus":"partial"},
+    {"id":"tenancy.isolation","name":"Structural tenant isolation","domain":"tenancy","priority":"P0","dependencies":["foundation.database"],"implementationStatus":"initial_extension_committed","testStatus":"not_run","documentationStatus":"partial"},
+    {"id":"identity.authentication","name":"Identity and secure sessions","domain":"identity","priority":"P0","dependencies":["foundation.database"],"implementationStatus":"planned","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"identity.authorization","name":"Capability-based authorization","domain":"identity","priority":"P0","dependencies":["identity.authentication","tenancy.isolation"],"implementationStatus":"planned","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"audit.core","name":"Audit logging","domain":"platform","priority":"P0","dependencies":["foundation.database"],"implementationStatus":"schema_only","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"catalog.core","name":"Tenant catalog and plans","domain":"catalog","priority":"P1","dependencies":["tenancy.isolation"],"implementationStatus":"schema_only","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"commerce.orders","name":"Order lifecycle and state machine","domain":"commerce","priority":"P1","dependencies":["catalog.core"],"implementationStatus":"schema_only","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"payments.core","name":"Payment state machine and provider adapters","domain":"payments","priority":"P1","dependencies":["commerce.orders"],"implementationStatus":"schema_only","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"wallet.ledger","name":"Wallet, immutable ledger, and safe mutations","domain":"wallet","priority":"P1","dependencies":["foundation.database"],"implementationStatus":"schema_only","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"jobs.queue","name":"Durable job queue and retries","domain":"infrastructure","priority":"P1","dependencies":["foundation.database"],"implementationStatus":"schema_only","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"providers.vpn","name":"VPN provider interface and capabilities","domain":"provisioning","priority":"P2","dependencies":["commerce.orders","jobs.queue"],"implementationStatus":"schema_only","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"channels.telegram","name":"Multi-tenant Telegram webhook engine","domain":"telegram","priority":"P2","dependencies":["identity.authorization","jobs.queue"],"implementationStatus":"planned","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"channels.storefront","name":"Tenant storefront and custom domains","domain":"web","priority":"P3","dependencies":["catalog.core","commerce.orders"],"implementationStatus":"planned","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"channels.miniapp","name":"Telegram Mini App","domain":"web","priority":"P3","dependencies":["channels.telegram","channels.storefront"],"implementationStatus":"planned","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"resellers.core","name":"Reseller accounts and pricing","domain":"resellers","priority":"P4","dependencies":["wallet.ledger","catalog.core"],"implementationStatus":"schema_only","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"partners.core","name":"Partner attribution and commissions","domain":"partners","priority":"P4","dependencies":["commerce.orders"],"implementationStatus":"schema_only","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"migration.core","name":"Safe resumable data migration","domain":"migration","priority":"P5","dependencies":["foundation.database"],"implementationStatus":"schema_only","testStatus":"not_started","documentationStatus":"planned"},
+    {"id":"ai.analytics","name":"Permission-aware natural-language analytics","domain":"intelligence","priority":"P6","dependencies":["identity.authorization","reporting.core"],"implementationStatus":"planned","testStatus":"not_started","documentationStatus":"planned"}
+  ]
+}
