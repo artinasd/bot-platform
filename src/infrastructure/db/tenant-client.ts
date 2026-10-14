@@ -70,7 +70,19 @@ const READ_OPERATIONS = new Set([
 ]);
 
 const UNIQUE_WRITE_OPERATIONS = new Set(["update", "delete", "upsert"]);
-const FILTERED_WRITE_OPERATIONS = new Set(["updateMany", "deleteMany"]);
+const FILTERED_WRITE_OPERATIONS = new Set([
+  "updateMany",
+  "deleteMany",
+  "updateManyAndReturn"
+]);
+const CREATE_OPERATIONS = new Set(["create", "createMany", "createManyAndReturn"]);
+const SUPPORTED_OPERATIONS = new Set([
+  ...UNIQUE_READ_OPERATIONS,
+  ...READ_OPERATIONS,
+  ...UNIQUE_WRITE_OPERATIONS,
+  ...FILTERED_WRITE_OPERATIONS,
+  ...CREATE_OPERATIONS
+]);
 
 function addTenantToWhere(args: Record<string, unknown>, tenantId: string) {
   const existing = (args.where ?? {}) as Record<string, unknown>;
@@ -100,6 +112,12 @@ export function createTenantClient(prisma: PrismaClient, tenantId: string) {
               );
             }
 
+            if (!SUPPORTED_OPERATIONS.has(operation)) {
+              throw new Error(
+                `Tenant-scoped client rejected unsupported Prisma operation: ${operation}.`
+              );
+            }
+
             const mutableArgs = args as Record<string, unknown>;
 
             if (READ_OPERATIONS.has(operation) || FILTERED_WRITE_OPERATIONS.has(operation)) {
@@ -117,7 +135,7 @@ export function createTenantClient(prisma: PrismaClient, tenantId: string) {
               addTenantToData(mutableArgs, tenantId);
             }
 
-            if (operation === "createMany") {
+            if (operation === "createMany" || operation === "createManyAndReturn") {
               const data = mutableArgs.data;
               if (Array.isArray(data)) {
                 mutableArgs.data = data.map((row) => ({
