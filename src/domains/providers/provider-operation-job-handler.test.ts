@@ -18,13 +18,13 @@ const operation = {
   idempotencyKey: "operation-key",
   action: "subscription.create",
   requestPayload: { planId: "plan-a" }
-} as ProviderOperation;
+} as unknown as ProviderOperation;
 
 const job = {
   id: "job-a",
   tenantId: "tenant-a",
   payload: { operationId: "operation-a" }
-} as Job;
+} as unknown as Job;
 
 function makeHandler() {
   const service = {
