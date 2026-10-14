@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient, ProviderOperationStatus, RecordStatus } from "@prisma/client";
 import { validateProviderOperationResponsePayload } from "./provider-operation-response-payload";
+import { validateProviderOperationRequestPayload } from "./provider-operation-request-payload";
 
 export type CreateProviderOperationInput = {
   tenantId: string;
@@ -59,7 +60,7 @@ export class ProviderOperationService {
     validateRequired(input.action, "Provider action", 100);
     validateRequired(input.idempotencyKey, "Idempotency key");
 
-    const requestPayload = input.requestPayload ?? {};
+    const requestPayload = validateProviderOperationRequestPayload(input.requestPayload ?? {});
     try {
       return await this.db.$transaction(async (tx) => {
         const existing = await tx.providerOperation.findFirst({
