@@ -1,0 +1,112 @@
+import { describe, expect, it, vi } from "vitest";
+import { Prisma, PrismaClient } from "@prisma/client";
+import { createTenantClient } from "./tenant-client";
+
+type QueryArgs = Record<string, unknown>;
+type OperationHandler = (input: {
+  model?: string;
+  operation: string;
+  args: QueryArgs;
+  query: (args: QueryArgs) => Promise<unknown>;
+}) => Promise<unknown>;
+
+function createHarness(tenantId = "tenant-a") {
+  let handler: OperationHandler | undefined;
+  const prisma = {
+    $extends(extension: unknown) {
+      const value = extension as {
+        query: { $allModels: { $allOperations: OperationHandler } };
+      };
+      handler = value.query.$allModels.$allOperations;
+      return {};
+    }
+  } as unknown as PrismaClient;
+
+  createTenantClient(prisma, tenantId);
+  if (!handler) throw new Error("Tenant query extension was not registered.");
+  return handler;
+}
+
+describe("tenant-scoped Prisma client", () => {
+  it("requires a non-empty tenant identifier", () => {
+    const prisma = { $extends: vi.fn() } as unknown as PrismaClient;
+    expect(() => createTenantClient(prisma, "  ")).toThrow(/tenant ID/i);
+    expect(prisma.$extends).not.toHaveBeenCalled();
+  });
+
+  it("adds tenant scope to reads without dropping existing filters", async () => {
+    const handler = createHarness();
+    const args: QueryArgs = { where: { status: "ACTIVE" } };
+    const query = vi.fn(async (received: QueryArgs) => received);
+
+    await handler({ model: "Product", operation: "findMany", args, query });
+
+    expect(args.where).toEqual({
+      AND: [{ status: "ACTIVE" }, { tenantId: "tenant-a" }]
+    });
+    expect(query).toHaveBeenCalledWith(args);
+  });
+
+  it("forces the tenant ID on direct creates", async () => {
+    const handler = createHarness();
+    const args: QueryArgs = { data: { tenantId: "tenant-b", name: "Product" } };
+
+    await handler({
+      model: "Product",
+      operation: "create",
+      args,
+      query: async (received) => received
+    });
+
+    expect(args.data).toEqual({ tenantId: "tenant-a", name: "Product" });
+  });
+
+  it("forces tenant IDs on every createMany row", async () => {
+    const handler = createHarness();
+    const args: QueryArgs = {
+      data: [
+        { tenantId: "tenant-b", name: "one" },
+        { name: "two" }
+      ]
+    };
+
+    await handler({
+      model: "Product",
+      operation: "createMany",
+      args,
+      query: async (received) => received
+    });
+
+    expect(args.data).toEqual([
+      { tenantId: "tenant-a", name: "one" },
+      { tenantId: "tenant-a", name: "two" }
+    ]);
+  });
+
+  it("rejects unsupported models instead of silently running unscoped", async () => {
+    const handler = createHarness();
+    const query = vi.fn(async () => "should not run");
+
+    await expect(handler({
+      model: "Tenant",
+      operation: "findMany",
+      args: {},
+      query
+    })).rejects.toThrow(/unsupported model access/i);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("adds the tenant selector to unique reads", async () => {
+    const handler = createHarness();
+    const args: QueryArgs = { where: { id: "product-1" } };
+
+    await handler({
+      model: "Product",
+      operation: "findUnique",
+      args,
+      query: async (received) => received
+    });
+
+    expect(args.where).toEqual({ id: "product-1", tenantId: "tenant-a" });
+  });
+});
