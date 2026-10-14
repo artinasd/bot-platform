@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   claimNext: vi.fn(),
   markSucceeded: vi.fn(),
   markFailed: vi.fn(),
+  renewLease: vi.fn(),
   handler: vi.fn()
 }));
 
@@ -22,11 +23,13 @@ function makeWorker(overrides: {
   clock?: () => Date;
   baseDelay?: number;
   maxDelay?: number;
+  leaseRenewalIntervalMs?: number;
 } = {}) {
   const queue = {
     claimNext: mocks.claimNext,
     markSucceeded: mocks.markSucceeded,
-    markFailed: mocks.markFailed
+    markFailed: mocks.markFailed,
+    renewLease: mocks.renewLease
   } as unknown as JobQueue;
 
   return new JobWorker(
@@ -35,7 +38,8 @@ function makeWorker(overrides: {
     "worker-a",
     overrides.clock ?? (() => new Date("2026-10-14T10:00:00.000Z")),
     overrides.baseDelay ?? 1_000,
-    overrides.maxDelay ?? 10_000
+    overrides.maxDelay ?? 10_000,
+    overrides.leaseRenewalIntervalMs ?? 60_000
   );
 }
 
@@ -45,6 +49,7 @@ describe("durable job worker", () => {
     mocks.claimNext.mockResolvedValue(job);
     mocks.markSucceeded.mockResolvedValue({ count: 1 });
     mocks.markFailed.mockResolvedValue({ count: 1 });
+    mocks.renewLease.mockResolvedValue({ count: 1 });
     mocks.handler.mockResolvedValue(undefined);
   });
 
@@ -176,6 +181,28 @@ describe("durable job worker", () => {
     );
   });
 
+  it("renews the job lease while a handler is running longer than one heartbeat interval", async () => {
+    mocks.handler.mockImplementation(async () => new Promise((resolve) => setTimeout(resolve, 25)));
+
+    await expect(makeWorker({ leaseRenewalIntervalMs: 5 }).runNext()).resolves.toEqual({
+      status: "succeeded",
+      jobId: "job-a"
+    });
+    expect(mocks.renewLease).toHaveBeenCalledWith("job-a", "worker-a", expect.any(Date));
+    expect(mocks.markSucceeded).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mark a job successful after its heartbeat reports lost ownership", async () => {
+    mocks.renewLease.mockResolvedValue({ count: 0 });
+    mocks.handler.mockImplementation(async () => new Promise((resolve) => setTimeout(resolve, 25)));
+
+    await expect(makeWorker({ leaseRenewalIntervalMs: 5 }).runNext()).resolves.toEqual({
+      status: "lease-lost",
+      jobId: "job-a"
+    });
+    expect(mocks.markSucceeded).not.toHaveBeenCalled();
+  });
+
   it("reports lease loss rather than claiming success after ownership expires", async () => {
     mocks.markSucceeded.mockResolvedValue({ count: 0 });
 
@@ -188,5 +215,9 @@ describe("durable job worker", () => {
     expect(() => new JobWorker(queue, {}, "worker-a", undefined, 0)).toThrow("Base retry delay must be a positive integer.");
     expect(() => new JobWorker(queue, {}, "worker-a", undefined, 2_000, 1_000))
       .toThrow("Maximum retry delay must be an integer at least as large as the base delay.");
+    expect(() => new JobWorker(queue, {}, "worker-a", undefined, 1_000, 2_000, 0))
+      .toThrow("Lease renewal interval must be a positive integer shorter than the five-minute job lease.");
+    expect(() => new JobWorker(queue, {}, "worker-a", undefined, 1_000, 2_000, 300_000))
+      .toThrow("Lease renewal interval must be a positive integer shorter than the five-minute job lease.");
   });
 });

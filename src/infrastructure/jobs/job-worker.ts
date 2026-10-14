@@ -51,7 +51,8 @@ export class JobWorker {
     private readonly workerId: string,
     private readonly clock: () => Date = () => new Date(),
     private readonly baseRetryDelayMs = 1_000,
-    private readonly maxRetryDelayMs = 5 * 60_000
+    private readonly maxRetryDelayMs = 5 * 60_000,
+    private readonly leaseRenewalIntervalMs = 60_000
   ) {
     if (!workerId.trim()) throw new Error("Worker ID is required.");
     if (!Number.isSafeInteger(baseRetryDelayMs) || baseRetryDelayMs <= 0) {
@@ -59,6 +60,13 @@ export class JobWorker {
     }
     if (!Number.isSafeInteger(maxRetryDelayMs) || maxRetryDelayMs < baseRetryDelayMs) {
       throw new Error("Maximum retry delay must be an integer at least as large as the base delay.");
+    }
+    if (
+      !Number.isSafeInteger(leaseRenewalIntervalMs) ||
+      leaseRenewalIntervalMs <= 0 ||
+      leaseRenewalIntervalMs >= 5 * 60_000
+    ) {
+      throw new Error("Lease renewal interval must be a positive integer shorter than the five-minute job lease.");
     }
   }
 
@@ -78,9 +86,32 @@ export class JobWorker {
       return result.count === 1 ? { status: "failed", jobId: job.id } : { status: "lease-lost", jobId: job.id };
     }
 
+    let leaseLost = false;
+    let heartbeatStopped = false;
+    let renewalInFlight: Promise<void> = Promise.resolve();
+    const heartbeat = setInterval(() => {
+      renewalInFlight = renewalInFlight.then(async () => {
+        if (heartbeatStopped || leaseLost) return;
+        try {
+          const renewed = await this.queue.renewLease(job.id, this.workerId, this.clock());
+          if (renewed.count !== 1) leaseLost = true;
+        } catch {
+          // Retry transient renewal failures on the next tick. The queue's
+          // lease cutoff still prevents an expired worker from committing.
+        }
+      });
+    }, this.leaseRenewalIntervalMs);
+    const stopHeartbeat = async () => {
+      heartbeatStopped = true;
+      clearInterval(heartbeat);
+      await renewalInFlight;
+    };
+
     try {
       await handler(job);
     } catch (error) {
+      await stopHeartbeat();
+      if (leaseLost) return { status: "lease-lost", jobId: job.id };
       const failedAt = this.clock();
       const details = errorDetails(error);
       const hasAttemptsRemaining = job.attempts < job.maxAttempts;
@@ -103,6 +134,9 @@ export class JobWorker {
         ? { status: "retry-scheduled", jobId: job.id, retryAt }
         : { status: "failed", jobId: job.id };
     }
+
+    await stopHeartbeat();
+    if (leaseLost) return { status: "lease-lost", jobId: job.id };
 
     const result = await this.queue.markSucceeded(job.id, this.workerId, this.clock());
     return result.count === 1
