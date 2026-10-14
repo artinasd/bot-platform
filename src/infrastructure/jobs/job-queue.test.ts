@@ -120,6 +120,30 @@ describe("durable job queue", () => {
       .rejects.toThrow("Job idempotency key is already associated with a different job.");
   });
 
+  it.each([
+    ["tenant", { tenantId: "tenant-b" }],
+    ["job type", { type: "provider.delete" }],
+    ["correlation ID", { correlationId: "correlation-b" }],
+    ["attempt budget", { maxAttempts: 3 }]
+  ])("rejects idempotency-key reuse with a different %s", async (_label, changed) => {
+    const runAt = new Date("2026-10-14T10:00:00.000Z");
+    mocks.jobUpsert.mockResolvedValue({
+      id: "job-a",
+      tenantId: "tenant-a",
+      type: "provider.provision",
+      payload: { orderId: "order-a" },
+      idempotencyKey: "job-key-a",
+      correlationId: "correlation-a",
+      runAt,
+      maxAttempts: 8,
+      status: JobStatus.QUEUED
+    });
+    const queue = makeQueue();
+
+    await expect(queue.enqueue({ ...enqueueInput, runAt, ...changed }))
+      .rejects.toThrow("Job idempotency key is already associated with a different job.");
+  });
+
   it("accepts the same job payload regardless of object key order", async () => {
     mocks.jobUpsert.mockResolvedValue({
       id: "job-a",
