@@ -49,7 +49,7 @@ describe("authorization service", () => {
     expect(hasCapability({
       ...actor,
       explicitPermissions: ["root:everything", "tenant:read"]
-    }, "support:manage")).toBe(false);
+    }, "payments:verify")).toBe(false);
     expect(hasCapability({
       ...actor,
       explicitPermissions: ["root:everything", "tenant:read"]
