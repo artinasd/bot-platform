@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   findOperation: vi.fn(),
   findActiveJob: vi.fn(),
+  findRetryGeneration: vi.fn(),
   updateOperation: vi.fn(),
   createJob: vi.fn()
 }));
@@ -20,7 +21,7 @@ const operation = {
 
 const tx = {
   providerOperation: { findFirst: mocks.findOperation, updateMany: mocks.updateOperation },
-  job: { findFirst: mocks.findActiveJob, create: mocks.createJob }
+  job: { findFirst: mocks.findActiveJob, findUnique: mocks.findRetryGeneration, create: mocks.createJob }
 };
 
 function makeService(maxAttempts = 8) {
@@ -33,6 +34,7 @@ describe("ProviderOperationRetryService", () => {
     vi.clearAllMocks();
     mocks.findOperation.mockResolvedValue(operation);
     mocks.findActiveJob.mockResolvedValue(null);
+    mocks.findRetryGeneration.mockResolvedValue(null);
     mocks.updateOperation.mockResolvedValue({ count: 1 });
     mocks.createJob.mockImplementation(async (args) => ({ id: "job-retry-a", ...args.data }));
   });
@@ -56,6 +58,15 @@ describe("ProviderOperationRetryService", () => {
     expect(result.job.id).toBe("job-retry-a");
   });
 
+  it("returns the existing retry generation when a request is repeated after commit", async () => {
+    const existingJob = { id: "job-retry-a", status: JobStatus.QUEUED };
+    mocks.findOperation.mockResolvedValue({ ...operation, status: ProviderOperationStatus.PENDING });
+    mocks.findRetryGeneration.mockResolvedValue(existingJob);
+    const result = await makeService().requeue({ tenantId: "tenant-a", operationId: "operation-a" });
+    expect(result).toEqual({ operation: { ...operation, status: ProviderOperationStatus.PENDING }, job: existingJob, duplicate: true });
+    expect(mocks.updateOperation).not.toHaveBeenCalled();
+    expect(mocks.createJob).not.toHaveBeenCalled();
+  });
   it("refuses unknown outcomes and does not create a job", async () => {
     mocks.findOperation.mockResolvedValue({ ...operation, status: ProviderOperationStatus.UNKNOWN });
     await expect(makeService().requeue({ tenantId: "tenant-a", operationId: "operation-a" })).rejects.toThrow(/Only explicitly retryable/);

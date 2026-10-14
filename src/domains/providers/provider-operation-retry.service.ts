@@ -32,6 +32,21 @@ export class ProviderOperationRetryService {
         where: { id: input.operationId, tenantId: input.tenantId }
       });
       if (!operation) throw new Error("Provider operation was not found in this tenant.");
+
+      // If the transaction committed but the caller lost its response, return
+      // the exact retry generation rather than creating a second job.
+      if (operation.status === ProviderOperationStatus.PENDING && operation.attempts > 0) {
+        const previousRetry = await tx.job.findUnique({
+          where: { idempotencyKey: "provider-operation:" + operation.id + ":retry:" + operation.attempts }
+        });
+        if (previousRetry) {
+          if (ACTIVE_JOB_STATUSES.includes(previousRetry.status)) {
+            return { operation, job: previousRetry, duplicate: true };
+          }
+          throw new Error("The previous retry generation is terminal or inconsistent; reconcile before requeueing.");
+        }
+      }
+
       if (operation.status !== ProviderOperationStatus.RETRYABLE_FAILURE) {
         throw new Error("Only explicitly retryable provider operations can be requeued.");
       }
@@ -79,7 +94,7 @@ export class ProviderOperationRetryService {
         }
       });
 
-      return { operation: { ...operation, status: ProviderOperationStatus.PENDING }, job };
+      return { operation: { ...operation, status: ProviderOperationStatus.PENDING }, job, duplicate: false };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 }
