@@ -326,7 +326,7 @@ describe("durable job queue", () => {
         lockedAt: null,
         lockedBy: null,
         lastErrorCode: "TEMPORARY",
-        lastError: "Provider unavailable"
+        lastError: "Job handler reported a retryable failure."
       }
     });
   });
@@ -359,12 +359,24 @@ describe("durable job queue", () => {
         runAt: new Date("2026-01-01T00:00:00.000Z"),
         lockedAt: null,
         lockedBy: null,
-        lastErrorCode: "E".repeat(120),
-        lastError: "M".repeat(2000)
+        lastErrorCode: "JOB_EXECUTION_FAILED",
+        lastError: "Job execution failed; outcome may require reconciliation."
       }
     });
   });
 
+  it("never persists caller-supplied secrets in failure messages or unsafe codes", async () => {
+    const queue = makeQueue();
+    await queue.markFailed("job-a", "worker-a", {
+      code: "AUTH_TOKEN=super-secret",
+      message: "Provider response included authorization=super-secret"
+    }, undefined, new Date("2026-10-14T10:03:00.000Z"));
+
+    const update = mocks.jobUpdateMany.mock.calls[0][0];
+    expect(update.data.lastErrorCode).toBe("JOB_EXECUTION_FAILED");
+    expect(update.data.lastError).toBe("Job execution failed; outcome may require reconciliation.");
+    expect(JSON.stringify(update)).not.toContain("super-secret");
+  });
   it("does not mutate a job when the reporting worker no longer owns it", async () => {
     mocks.jobFindFirst.mockResolvedValue(null);
     const queue = makeQueue();

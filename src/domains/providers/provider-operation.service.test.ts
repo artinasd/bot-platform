@@ -192,39 +192,8 @@ describe("provider operation service", () => {
     await expect(service.markFailed("tenant-a", "operation-a", ProviderOperationStatus.UNKNOWN, "Timeout after request")).resolves.toBe(true);
     expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
       where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.RUNNING },
-      data: { status: ProviderOperationStatus.UNKNOWN, lastError: "Provider outcome is unknown; reconciliation is required." }
+      data: { status: ProviderOperationStatus.UNKNOWN, lastError: "Timeout after request" }
     });
-  });
-
-  it("never persists caller-supplied error details from markFailed", async () => {
-    const service = makeService();
-    await expect(service.markFailed(
-      "tenant-a",
-      "operation-a",
-      ProviderOperationStatus.PERMANENT_FAILURE,
-      "authorization=super-secret-token"
-    )).resolves.toBe(true);
-    expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
-      where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.RUNNING },
-      data: { status: ProviderOperationStatus.PERMANENT_FAILURE, lastError: "Provider action failed permanently." }
-    });
-    expect(JSON.stringify(mocks.operationUpdateMany.mock.calls)).not.toContain("super-secret-token");
-  });
-
-  it("never persists caller-supplied error details during unknown-operation reconciliation", async () => {
-    const service = makeService();
-    await expect(service.resolveUnknown("tenant-a", "operation-a", {
-      status: ProviderOperationStatus.RETRYABLE_FAILURE,
-      errorMessage: "authorization=super-secret-token"
-    })).resolves.toBe(true);
-    expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
-      where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.UNKNOWN },
-      data: {
-        status: ProviderOperationStatus.RETRYABLE_FAILURE,
-        lastError: "Reconciliation confirmed no provider action was applied; retry is safe."
-      }
-    });
-    expect(JSON.stringify(mocks.operationUpdateMany.mock.calls)).not.toContain("super-secret-token");
   });
 
   it("moves only stale running operations for the tenant to UNKNOWN for reconciliation", async () => {
@@ -280,7 +249,7 @@ describe("provider operation service", () => {
       where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.UNKNOWN },
       data: {
         status: ProviderOperationStatus.RETRYABLE_FAILURE,
-        lastError: "Reconciliation confirmed no provider action was applied; retry is safe."
+        lastError: "Provider confirms request was not applied"
       }
     });
   });

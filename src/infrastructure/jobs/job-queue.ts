@@ -19,6 +19,17 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value) ?? "undefined";
 }
 
+function safeFailureDetails(error: { code: string; message: string }, retryable: boolean) {
+  const code = /^[A-Z0-9_]{1,80}$/.test(error.code) ? error.code : "JOB_EXECUTION_FAILED";
+  return {
+    code,
+    // Durable records are a persistence boundary; never trust callers to redact exception text.
+    message: retryable
+      ? "Job handler reported a retryable failure."
+      : "Job execution failed; outcome may require reconciliation."
+  };
+}
+
 export class JobQueue {
   constructor(private readonly db: PrismaClient) {}
 
@@ -165,6 +176,7 @@ export class JobQueue {
     if (!job) return { count: 0 };
 
     const retryable = job.attempts < job.maxAttempts && retryAt !== undefined;
+    const safeError = safeFailureDetails(error, retryable);
     return this.db.job.updateMany({
       where: ownership,
       data: {
@@ -172,8 +184,8 @@ export class JobQueue {
         runAt: retryable ? retryAt : job.runAt,
         lockedAt: null,
         lockedBy: null,
-        lastErrorCode: error.code.slice(0, 120),
-        lastError: error.message.slice(0, 2000)
+        lastErrorCode: safeError.code,
+        lastError: safeError.message
       }
     });
   }

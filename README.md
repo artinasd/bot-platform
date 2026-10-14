@@ -25,7 +25,7 @@ Requirements: Node.js 20.9+ and npm.
 5. Validate schema: npm run prisma:validate.
 6. Run the development server: npm run dev.
 
-Durable job records intentionally store generic failure messages rather than raw exception text, which may contain secrets or provider response data. Investigate failures through separately controlled, redacted diagnostics.
+Durable job records intentionally store generic failure messages rather than raw exception text, which may contain secrets or provider response data. JobQueue.markFailed enforces this at the database-persistence boundary, even when called outside JobWorker. Investigate failures through separately controlled, redacted diagnostics.
 
 Useful checks:
 
