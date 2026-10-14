@@ -42,9 +42,24 @@ Do not run db:push or migrations against production without reviewing the genera
 | DIRECT_URL | Direct PostgreSQL connection URL for Prisma schema operations |
 | UPSTASH_REDIS_REST_URL | Upstash Redis REST endpoint |
 | UPSTASH_REDIS_REST_TOKEN | Upstash Redis REST token |
-| APP_BASE_URL | Canonical application base URL |
-| APP_ENCRYPTION_KEY | Key material for a future secrets-encryption adapter; not yet consumed by application code |
-| CRON_SECRET | Secret for future authenticated scheduled-task endpoints; not yet consumed by application code |
+| APP_URL | Application base URL |
+| APP_REGION | Preferred deployment region |
+| AUTH_SECRET | Authentication/session secret; authentication flows are not yet implemented |
+| SESSION_COOKIE_NAME | Session cookie name for the future auth layer |
+| SESSION_TTL_SECONDS | Intended session lifetime in seconds |
+| CREDENTIAL_ENCRYPTION_KEY | Base64-encoded 32-byte AES-256-GCM key for provider credentials |
+| INTERNAL_JOB_SECRET | Internal job-dispatch authentication secret; dispatch endpoint is not yet implemented |
+| QSTASH_TOKEN | QStash token for future asynchronous dispatch |
+| QSTASH_CURRENT_SIGNING_KEY | Current QStash signature verification key |
+| QSTASH_NEXT_SIGNING_KEY | Next QStash signature verification key |
+| SUPABASE_URL | Supabase project URL for the future storage adapter |
+| SUPABASE_SERVICE_ROLE_KEY | Server-only Supabase service-role key |
+| SUPABASE_STORAGE_BUCKET | Supabase Storage bucket name |
+| TELEGRAM_PLATFORM_BOT_TOKEN | Optional platform-owned Telegram bot token |
+| TELEGRAM_WEBHOOK_BASE_URL | Base URL for Telegram webhook configuration |
+| PLATFORM_BOOTSTRAP_EMAIL | Optional platform bootstrap identity email |
+| PLATFORM_BOOTSTRAP_PASSWORD | Optional bootstrap password; never set a default or commit a real value |
+| LOG_LEVEL | Application log verbosity |
 
 Never commit real credentials. Rotate any credential accidentally committed to repository history.
 
