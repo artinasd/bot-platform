@@ -218,6 +218,15 @@ describe("provider operation service", () => {
     await expect(service.markFailed("tenant-a", "operation-a", ProviderOperationStatus.UNKNOWN, " ")).rejects.toThrow(/Provider operation error is required/);
   });
 
+  it("rejects invalid target states when resolving an unknown operation", async () => {
+    const service = makeService();
+    await expect(service.resolveUnknown("tenant-a", "operation-a", {
+      status: ProviderOperationStatus.PENDING,
+      errorMessage: "must not move back to pending"
+    } as never)).rejects.toThrow(/Invalid unknown-operation resolution status/);
+    expect(mocks.operationUpdateMany).not.toHaveBeenCalled();
+  });
+
   it("scopes reads to the requested tenant", async () => {
     mocks.operationFindFirst.mockResolvedValue(null);
     const service = makeService();

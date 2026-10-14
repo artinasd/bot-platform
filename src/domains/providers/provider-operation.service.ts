@@ -163,6 +163,14 @@ export class ProviderOperationService {
     validateRequired(tenantId, "Tenant ID");
     validateRequired(operationId, "Provider operation ID");
 
+    const isSuccess = resolution.status === ProviderOperationStatus.SUCCEEDED;
+    const isFailure =
+      resolution.status === ProviderOperationStatus.RETRYABLE_FAILURE ||
+      resolution.status === ProviderOperationStatus.PERMANENT_FAILURE;
+    if (!isSuccess && !isFailure) {
+      throw new Error("Invalid unknown-operation resolution status.");
+    }
+
     const data: Prisma.ProviderOperationUpdateManyMutationInput =
       resolution.status === ProviderOperationStatus.SUCCEEDED
         ? {
