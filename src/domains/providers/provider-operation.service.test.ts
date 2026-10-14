@@ -1,0 +1,189 @@
+import { ProviderOperationStatus } from "@prisma/client";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ProviderOperationService } from "./provider-operation.service";
+
+const mocks = vi.hoisted(() => ({
+  operationFindFirst: vi.fn(),
+  operationCreate: vi.fn(),
+  operationUpdateMany: vi.fn(),
+  orderFindFirst: vi.fn(),
+  itemFindFirst: vi.fn()
+}));
+
+function makeService() {
+  const tx = {
+    providerOperation: {
+      findFirst: mocks.operationFindFirst,
+      create: mocks.operationCreate
+    },
+    order: { findFirst: mocks.orderFindFirst },
+    orderItem: { findFirst: mocks.itemFindFirst }
+  };
+  const db = {
+    providerOperation: { findFirst: mocks.operationFindFirst, updateMany: mocks.operationUpdateMany },
+    $transaction: vi.fn(async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx))
+  };
+  return new ProviderOperationService(db as never);
+}
+
+const input = {
+  tenantId: "tenant-a",
+  orderId: "order-a",
+  itemId: "item-a",
+  action: "provision",
+  idempotencyKey: "provision-order-a-item-a",
+  requestPayload: { plan: "basic", seats: 2 }
+};
+
+const existingOperation = {
+  id: "operation-a",
+  tenantId: "tenant-a",
+  orderId: "order-a",
+  itemId: "item-a",
+  action: "provision",
+  idempotencyKey: "provision-order-a-item-a",
+  requestPayload: { seats: 2, plan: "basic" },
+  status: ProviderOperationStatus.PENDING,
+  attempts: 0
+};
+
+describe("provider operation service", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.operationFindFirst.mockResolvedValue(null);
+    mocks.operationCreate.mockResolvedValue(existingOperation);
+    mocks.operationUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.orderFindFirst.mockResolvedValue({ id: "order-a" });
+    mocks.itemFindFirst.mockResolvedValue({ id: "item-a" });
+  });
+
+  it("validates required identifiers before database access", async () => {
+    const service = makeService();
+    await expect(service.create({ ...input, tenantId: " " })).rejects.toThrow(/Tenant ID is required/);
+    expect(mocks.operationFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("creates an operation only after tenant-scoped order and item checks", async () => {
+    const service = makeService();
+    await expect(service.create(input)).resolves.toEqual({
+      operation: existingOperation,
+      duplicate: false
+    });
+    expect(mocks.orderFindFirst).toHaveBeenCalledWith({
+      where: { id: "order-a", tenantId: "tenant-a" },
+      select: { id: true }
+    });
+    expect(mocks.itemFindFirst).toHaveBeenCalledWith({
+      where: { id: "item-a", tenantId: "tenant-a", orderId: "order-a" },
+      select: { id: true }
+    });
+    expect(mocks.operationCreate).toHaveBeenCalledWith({
+      data: {
+        tenantId: "tenant-a",
+        orderId: "order-a",
+        itemId: "item-a",
+        action: "provision",
+        idempotencyKey: "provision-order-a-item-a",
+        requestPayload: { plan: "basic", seats: 2 }
+      }
+    });
+  });
+
+  it("returns a duplicate for an equivalent idempotent request", async () => {
+    mocks.operationFindFirst.mockResolvedValue(existingOperation);
+    const service = makeService();
+    await expect(service.create(input)).resolves.toEqual({
+      operation: existingOperation,
+      duplicate: true
+    });
+    expect(mocks.orderFindFirst).not.toHaveBeenCalled();
+    expect(mocks.operationCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects idempotency-key reuse with a different payload or operation target", async () => {
+    mocks.operationFindFirst.mockResolvedValue(existingOperation);
+    const service = makeService();
+    await expect(service.create({
+      ...input,
+      requestPayload: { plan: "premium", seats: 2 }
+    })).rejects.toThrow(/different provider operation/);
+    await expect(service.create({ ...input, itemId: "another-item" })).rejects.toThrow(/different provider operation/);
+  });
+
+  it("rejects orders not owned by the requested tenant", async () => {
+    mocks.orderFindFirst.mockResolvedValue(null);
+    const service = makeService();
+    await expect(service.create(input)).rejects.toThrow(/Order not found in this tenant/);
+    expect(mocks.itemFindFirst).not.toHaveBeenCalled();
+    expect(mocks.operationCreate).not.toHaveBeenCalled();
+  });
+
+  it("does not create an operation for an item outside the specified order and tenant", async () => {
+    mocks.itemFindFirst.mockResolvedValue(null);
+    const service = makeService();
+    await expect(service.create(input)).rejects.toThrow(/Order item not found/);
+    expect(mocks.operationCreate).not.toHaveBeenCalled();
+  });
+
+  it("claims only pending or retryable operations and increments attempts atomically", async () => {
+    mocks.operationFindFirst.mockResolvedValue({ ...existingOperation, status: ProviderOperationStatus.RUNNING, attempts: 1 });
+    const service = makeService();
+    await service.claim("tenant-a", "operation-a");
+    expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: "operation-a",
+        tenantId: "tenant-a",
+        status: { in: [ProviderOperationStatus.PENDING, ProviderOperationStatus.RETRYABLE_FAILURE] }
+      },
+      data: {
+        status: ProviderOperationStatus.RUNNING,
+        attempts: { increment: 1 },
+        lastError: null
+      }
+    });
+  });
+
+  it("returns null when another worker already claimed or the operation is not retryable", async () => {
+    mocks.operationUpdateMany.mockResolvedValue({ count: 0 });
+    const service = makeService();
+    await expect(service.claim("tenant-b", "operation-a")).resolves.toBeNull();
+    expect(mocks.operationFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("marks success only for a running operation in the requested tenant", async () => {
+    const service = makeService();
+    await expect(service.markSucceeded("tenant-a", "operation-a", { providerRef: "ref-1" })).resolves.toBe(true);
+    expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
+      where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.RUNNING },
+      data: {
+        status: ProviderOperationStatus.SUCCEEDED,
+        responsePayload: { providerRef: "ref-1" },
+        lastError: null
+      }
+    });
+  });
+
+  it("allows unknown outcomes to be recorded without making them automatically retryable", async () => {
+    const service = makeService();
+    await expect(service.markFailed("tenant-a", "operation-a", ProviderOperationStatus.UNKNOWN, "Timeout after request")).resolves.toBe(true);
+    expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
+      where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.RUNNING },
+      data: { status: ProviderOperationStatus.UNKNOWN, lastError: "Timeout after request" }
+    });
+  });
+
+  it("rejects invalid failure states and empty errors", async () => {
+    const service = makeService();
+    await expect(service.markFailed("tenant-a", "operation-a", ProviderOperationStatus.SUCCEEDED as never, "bad")).rejects.toThrow(/Invalid provider operation failure status/);
+    await expect(service.markFailed("tenant-a", "operation-a", ProviderOperationStatus.UNKNOWN, " ")).rejects.toThrow(/Provider operation error is required/);
+  });
+
+  it("scopes reads to the requested tenant", async () => {
+    mocks.operationFindFirst.mockResolvedValue(null);
+    const service = makeService();
+    await expect(service.getById("tenant-b", "operation-a")).resolves.toBeNull();
+    expect(mocks.operationFindFirst).toHaveBeenCalledWith({
+      where: { id: "operation-a", tenantId: "tenant-b" }
+    });
+  });
+});
