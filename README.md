@@ -89,3 +89,8 @@ createTenantClient is intended as a defense-in-depth query scoping helper. It is
 ## CI
 
 GitHub Actions runs Prisma validation/generation, TypeScript checks, ESLint, unit tests, and a production build. A green workflow is required before treating a commit as verified.
+
+
+## Provider-operation recovery sweep
+
+`ProviderOperationRecoveryService` provides a bounded maintenance sweep for stale provider operations. It scans at most 500 tenants per call by default, considers only operations still marked `RUNNING` for at least five minutes, and transitions those operations to `UNKNOWN` through the tenant-scoped provider-operation service. It deliberately does not retry the provider action or decide whether it succeeded. Run it from a trusted scheduler/maintenance worker, then reconcile each unknown outcome against the provider before any retry. The sweep is not wired to an HTTP endpoint or automatically scheduled.
