@@ -17,7 +17,7 @@ PostgreSQL is authoritative for business and financial state. Redis is a cache/s
 
 ## Tenant isolation
 
-Tenant-scoped database access must use the tenant client and domain authorization checks. The current Prisma query extension scopes supported top-level operations on an allowlist of tenant-bearing models. It does not validate nested relation writes, relation connections, or whether foreign-key references belong to the same tenant. It is defense in depth, not a complete isolation boundary. Services must enforce ownership and permissions, and cross-tenant integration tests are still required. Do not expose the unscoped client to request handlers. Global platform operations must use it only from platform-authorized services.
+Tenant-scoped database access must use the tenant client and domain authorization checks. The Prisma query extension scopes supported top-level operations on an allowlist of tenant-bearing models and rejects nested relation writes for create, update, and upsert. It does **not** validate whether scalar foreign-key references (such as `orderId`, `customerId`, `productId`, or `planId`) belong to the same tenant, and it is not a complete isolation boundary. Domain services must verify ownership and permissions; database-enforced tenant-consistent composite foreign keys and PostgreSQL row-level security remain important follow-up work. Cross-tenant integration tests against PostgreSQL are still required. Do not expose the unscoped client to request handlers. Global platform operations must use it only from platform-authorized services.
 
 ## Serverless constraints
 
@@ -25,4 +25,4 @@ No process memory or local disk may be treated as durable production state. The 
 
 ## Current implementation status
 
-The foundation currently includes the initial Prisma schema, cache adapter, tenant query extension, password-based authentication and persistent sessions, catalog reads, and customer order creation/read endpoints. The GitHub Actions run on the current main commit has passed Prisma schema validation, Prisma client generation, TypeScript typecheck, lint, unit tests, and a production build. These checks establish that the current code validates and builds; they do not establish production readiness or end-to-end correctness against a live PostgreSQL/Redis deployment.
+The foundation currently includes the initial Prisma schema, cache adapter, tenant query extension, password-based authentication and persistent sessions, catalog reads, and customer order creation/read endpoints. GitHub Actions validates the Prisma schema, generates the Prisma client, typechecks, lints, runs unit tests, and builds the production application. These checks establish that the code validates and builds; they do not establish production readiness or end-to-end correctness against a live PostgreSQL/Redis deployment.
