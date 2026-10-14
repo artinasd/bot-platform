@@ -172,6 +172,33 @@ describe("provider operation service", () => {
     });
   });
 
+  it("moves only stale running operations for the tenant to UNKNOWN for reconciliation", async () => {
+    const service = makeService();
+    const staleBefore = new Date("2026-10-14T10:00:00.000Z");
+
+    await expect(service.markExpiredRunningUnknown("tenant-a", staleBefore)).resolves.toBe(1);
+
+    expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
+      where: {
+        tenantId: "tenant-a",
+        status: ProviderOperationStatus.RUNNING,
+        updatedAt: { lt: staleBefore }
+      },
+      data: {
+        status: ProviderOperationStatus.UNKNOWN,
+        lastError: "Provider operation exceeded its execution window; outcome must be reconciled before retrying."
+      }
+    });
+  });
+
+  it("validates stale-operation recovery inputs before database access", async () => {
+    const service = makeService();
+
+    await expect(service.markExpiredRunningUnknown(" ", new Date())).rejects.toThrow(/Tenant ID is required/);
+    await expect(service.markExpiredRunningUnknown("tenant-a", new Date("invalid"))).rejects.toThrow(/valid stale-before date/);
+    expect(mocks.operationUpdateMany).not.toHaveBeenCalled();
+  });
+
   it("resolves unknown outcomes only through an explicit reconciliation decision", async () => {
     const service = makeService();
     await expect(service.resolveUnknown("tenant-a", "operation-a", {

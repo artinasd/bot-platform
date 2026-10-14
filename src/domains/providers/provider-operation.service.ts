@@ -153,6 +153,28 @@ export class ProviderOperationService {
     return result.count === 1;
   }
 
+  async markExpiredRunningUnknown(tenantId: string, staleBefore: Date) {
+    validateRequired(tenantId, "Tenant ID");
+    if (!(staleBefore instanceof Date) || Number.isNaN(staleBefore.getTime())) {
+      throw new Error("A valid stale-before date is required.");
+    }
+
+    // A timed-out request may already have taken effect at the provider.
+    // Move it to UNKNOWN so a worker cannot blindly issue the side effect again.
+    const result = await this.db.providerOperation.updateMany({
+      where: {
+        tenantId,
+        status: ProviderOperationStatus.RUNNING,
+        updatedAt: { lt: staleBefore }
+      },
+      data: {
+        status: ProviderOperationStatus.UNKNOWN,
+        lastError: "Provider operation exceeded its execution window; outcome must be reconciled before retrying."
+      }
+    });
+    return result.count;
+  }
+
   async resolveUnknown(
     tenantId: string,
     operationId: string,
