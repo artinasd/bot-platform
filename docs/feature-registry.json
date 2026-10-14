@@ -21,7 +21,7 @@
         "foundation.config"
       ],
       "implementationStatus": "initial_schema_including_sessions_committed",
-      "testStatus": "validation_pending",
+      "testStatus": "prisma_validation_and_client_generation_passed_in_ci",
       "documentationStatus": "partial"
     },
     {
@@ -33,7 +33,7 @@
         "foundation.config"
       ],
       "implementationStatus": "initial_adapter_committed",
-      "testStatus": "tests_added_not_run",
+      "testStatus": "unit_tests_passed_in_ci",
       "documentationStatus": "partial"
     },
     {
@@ -45,7 +45,7 @@
         "foundation.database"
       ],
       "implementationStatus": "initial_extension_committed_security_review_needed",
-      "testStatus": "not_run",
+      "testStatus": "unit_tests_passed_in_ci_integration_tests_pending",
       "documentationStatus": "partial"
     },
     {
@@ -57,7 +57,7 @@
         "foundation.database"
       ],
       "implementationStatus": "initial_password_login_registration_and_database_sessions_committed",
-      "testStatus": "tests_added_not_run",
+      "testStatus": "unit_tests_passed_in_ci_integration_tests_pending",
       "documentationStatus": "partial"
     },
     {
@@ -70,7 +70,7 @@
         "tenancy.isolation"
       ],
       "implementationStatus": "initial_service_and_tests_committed",
-      "testStatus": "tests_added_not_run",
+      "testStatus": "unit_tests_passed_in_ci_integration_tests_pending",
       "documentationStatus": "partial"
     },
     {
@@ -94,7 +94,7 @@
         "tenancy.isolation"
       ],
       "implementationStatus": "initial_catalog_service_and_public_endpoints_committed",
-      "testStatus": "tests_added_not_run",
+      "testStatus": "unit_tests_passed_in_ci_integration_tests_pending",
       "documentationStatus": "partial"
     },
     {
@@ -106,7 +106,7 @@
         "catalog.core"
       ],
       "implementationStatus": "initial_order_service_and_authenticated_endpoints_committed",
-      "testStatus": "tests_added_not_run",
+      "testStatus": "unit_tests_passed_in_ci_integration_tests_pending",
       "documentationStatus": "partial"
     },
     {
@@ -256,7 +256,7 @@
         "foundation.config"
       ],
       "implementationStatus": "adapter_and_tests_committed",
-      "testStatus": "tests_added_not_run",
+      "testStatus": "unit_tests_passed_in_ci_integration_tests_pending",
       "documentationStatus": "partial"
     },
     {
@@ -268,7 +268,7 @@
         "foundation.config"
       ],
       "implementationStatus": "github_actions_workflow_committed",
-      "testStatus": "pending_ci_run",
+      "testStatus": "all_current_pipeline_steps_passed",
       "documentationStatus": "partial"
     }
   ]
