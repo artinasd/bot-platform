@@ -17,7 +17,7 @@ PostgreSQL is authoritative for business and financial state. Redis is a cache/s
 
 ## Tenant isolation
 
-Tenant-scoped database access must use the tenant client and domain authorization checks. The tenant client is defense in depth, not a substitute for service-level ownership checks, explicit permissions, and automated cross-tenant tests. Global platform operations must use the unscoped client only from platform-authorized services.
+Tenant-scoped database access must use the tenant client and domain authorization checks. The current Prisma query extension scopes supported top-level operations on an allowlist of tenant-bearing models. It does not validate nested relation writes, relation connections, or whether foreign-key references belong to the same tenant. It is defense in depth, not a complete isolation boundary. Services must enforce ownership and permissions, and cross-tenant integration tests are still required. Do not expose the unscoped client to request handlers. Global platform operations must use it only from platform-authorized services.
 
 ## Serverless constraints
 
@@ -25,4 +25,4 @@ No process memory or local disk may be treated as durable production state. The 
 
 ## Current implementation status
 
-This repository is being bootstrapped. The initial schema and infrastructure adapters are not yet verified by running Prisma validation, TypeScript, tests, or a production build. Do not treat the product as production-ready until the feature registry, security tests, domain services, integrations, and deployment checks are complete.
+The foundation currently includes the initial Prisma schema, cache adapter, tenant query extension, password-based authentication and persistent sessions, catalog reads, and customer order creation/read endpoints. The GitHub Actions run on the current main commit has passed Prisma schema validation, Prisma client generation, TypeScript typecheck, lint, unit tests, and a production build. These checks establish that the current code validates and builds; they do not establish production readiness or end-to-end correctness against a live PostgreSQL/Redis deployment.
