@@ -58,3 +58,33 @@ The current repository provides execution primitives and registries, not these v
 The current CI workflow generates an initial migration baseline from an empty schema for review; it is **not** an upgrade migration for an existing database. This repository has no checked-in migration history. Do not apply the generated baseline to an existing environment or deploy the required column to a populated database without a separately reviewed rollout plan. That plan must inventory existing provider operations, choose and validate their intended connections, backfill the association, then enforce the non-null and composite foreign-key constraints. Never guess a connection or backfill by selecting the first active connection.
 
 The credential resolver is now wired into the provider-operation job handler. Every execution rechecks the exact connection ID against the job tenant and requires the connection to remain active. Missing IDs and resolver failures are handled before executor invocation, without persisting raw resolver errors. Concrete provider adapters remain unimplemented and real provider calls remain disabled until adapter behavior and the database migration rollout are reviewed.
+
+## Required adapter test matrix
+
+Implement this matrix for each provider/action pair before registering it in a runtime registry. Tests must inject a fake transport or provider client; unit tests must not use production credentials, contact vendor endpoints, or perform real side effects. Keep the adapter's HTTP/client boundary injectable so the tests can assert both classification and whether a request was sent.
+
+| Scenario | Controlled fixture | Required assertions |
+| --- | --- | --- |
+| Confirmed success | Valid provider success response with a stable reference | Adapter returns only the documented minimal response fields; no credential, authorization header, or full raw response is returned. |
+| Duplicate delivery | Invoke the same operation twice with the same idempotency key | Both invocations use the same provider idempotency key where supported; the fake provider records at most one logical side effect. If the vendor lacks idempotency, test the documented deduplication/reconciliation behavior and keep the action disabled until its risk is accepted. |
+| Definitive rejection | Provider response documented to prove the action was not applied and the request is not retryable | Adapter classifies it as `PERMANENT_FAILURE`; the handler does not schedule a retry; persisted error text stays generic. |
+| Confirmed transient non-application | Provider explicitly confirms no side effect occurred and retry is safe | Adapter classifies it as `RETRYABLE_FAILURE`; retry policy remains bounded; no automatic retry is allowed if the response does not prove non-application. |
+| Timeout before sending | Fake transport fails before the request leaves the client | Classify as retryable only if the transport reliably proves no request was sent; assert bounded timeout configuration. |
+| Timeout or disconnect after submission | Fake transport accepts the request, then times out before a response | Classify as `UNKNOWN`; do not blindly send a second create/provision request; require reconciliation. |
+| Malformed success response | HTTP success with invalid JSON, missing required reference, unexpected shape, or oversized body | Do not mark the operation succeeded; classify as `UNKNOWN` unless provider evidence reliably proves no side effect; enforce response-size and schema limits. |
+| Provider 5xx / rate limit | Responses whose side-effect semantics vary by provider | Assert classification against documented vendor semantics, not status code alone. Retry only when non-application is proven; otherwise mark unknown. |
+| Reconciliation finds applied action | Lookup by provider reference or idempotency key returns the created resource | Resolve `UNKNOWN` to `SUCCEEDED` with a minimal validated payload; assert reconciliation performs no create/provision call. |
+| Reconciliation proves not applied | Authoritative lookup establishes no side effect, accounting for provider consistency delays | Resolve to `RETRYABLE_FAILURE` only after the adapter's documented certainty threshold; the next attempt uses the original idempotency key. |
+| Reconciliation remains inconclusive | Lookup unavailable, inconsistent, or returns an ambiguous result | Leave operation `UNKNOWN`; do not permit retry or silently convert the state to success/failure. |
+| Tenant credential isolation | Provide credentials resolved for tenant A and an operation/job for tenant B, or a mismatched connection/provider type | Handler fails closed before the adapter transport is called; no credential from another tenant reaches the fake client. |
+| Secret and payload redaction | Inject secret-like strings in exceptions, response headers, and malformed bodies | Persisted operation/job errors and adapter return values contain none of the injected secrets; diagnostics, if any, use a separately reviewed redaction path. |
+
+### Test organization and release gate
+
+- Keep pure classification and response-schema tests close to each adapter. Use a fake transport for timeout stages, malformed responses, and request-count assertions.
+- Add contract-level tests through the existing executor registry and job handler to verify the registered `providerType` + `action` pair, tenant-scoped credentials, idempotency key propagation, status transitions, and generic persistence messages.
+- Test recovery through the explicit `resolveUnknown` path. Never treat expiry of a worker lease as evidence that the provider did not apply the action.
+- Use provider sandbox tests only after the unit contract suite passes, with isolated sandbox credentials and disposable test resources. Sandbox tests must be separately enabled and must never run as part of ordinary CI by default.
+- Record per-action evidence for idempotency support, timeout semantics, consistency delay, reconciliation lookup, rate limits, and which responses prove non-application. A checklist marked complete without provider documentation or a reproducible test is not sufficient.
+- Until these cases pass for a concrete implementation and the existing-database migration rollout is reviewed, keep the adapter unregistered for production dispatch. This matrix is a release gate, not evidence that any vendor integration already exists.
+
