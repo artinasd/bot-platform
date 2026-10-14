@@ -20,6 +20,7 @@ const input = {
   tenantId: "tenant-a",
   orderId: "order-a",
   itemId: "item-a",
+  providerConnectionId: "connection-a",
   action: "provision",
   idempotencyKey: "operation-key-a",
   requestPayload: { plan: "premium" }
