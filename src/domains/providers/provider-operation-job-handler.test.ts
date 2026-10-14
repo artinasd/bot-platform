@@ -97,6 +97,23 @@ describe("provider-operation job handler", () => {
     );
   });
 
+  it("fails closed if the credential resolver returns a different connection", async () => {
+    mocks.getActiveCredentials.mockResolvedValue({
+      connectionId: "connection-from-another-operation",
+      providerType: "TEST",
+      credentials: "server-secret",
+      config: {}
+    });
+    await expect(makeHandler()(job)).rejects.toThrow(/provider action was not executed/);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.markFailed).toHaveBeenCalledWith(
+      "tenant-a",
+      "operation-a",
+      ProviderOperationStatus.PERMANENT_FAILURE,
+      "Active provider connection could not be resolved; no provider request was sent."
+    );
+  });
+
   it("fails closed when a legacy operation has no provider connection ID", async () => {
     const legacyOperation = { ...operation, providerConnectionId: "" } as unknown as ProviderOperation;
     mocks.getById.mockResolvedValue(legacyOperation);

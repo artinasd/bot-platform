@@ -103,6 +103,9 @@ export function createProviderOperationJobHandler(
         tenantId,
         operation.providerConnectionId
       );
+      if (credentials.connectionId !== operation.providerConnectionId) {
+        throw new Error("Resolved provider credentials do not match the operation connection.");
+      }
     } catch {
       const message = "Active provider connection could not be resolved; no provider request was sent.";
       const recorded = await service.markFailed(
