@@ -4,7 +4,7 @@ A multi-tenant platform foundation for VPN subscriptions and digital products, d
 
 ## Current status
 
-This repository is an early foundation, not a complete or production-ready product. Database models and a few infrastructure/domain primitives exist; Authentication/session primitives, catalog and order services, and authorization primitives have initial implementations; end-to-end authorization coverage, tenant onboarding, storefront, Telegram processing, provider adapters, payment integrations, reporting, migration flows, and production deployment hardening remain incomplete.
+This repository is an early foundation, not a complete or production-ready product. Database models and a few infrastructure/domain primitives exist; Authentication/session primitives, catalog and order services, authorization primitives, durable job infrastructure, and tenant-scoped provider-operation primitives have initial implementations; end-to-end authorization coverage, tenant onboarding, storefront, Telegram processing, concrete provider adapters, payment integrations, reporting, safe migration rollout, and production deployment hardening remain incomplete.
 
 ## Stack
 
@@ -69,7 +69,7 @@ The queue can lease one due job at a time through `JobQueue.claimNext`. `JobWork
 
 ## Provider-operation job handler
 
-`createProviderOperationJobHandler` accepts jobs whose payload contains an `operationId` and whose `tenantId` is set. It claims the tenant-scoped operation before calling an injected provider executor and records the response on success. Duplicate delivery of an already successful operation is a no-op; an `UNKNOWN` operation is blocked until explicit reconciliation. Unclassified executor errors become `UNKNOWN`. Provider adapters may throw `ProviderOperationExecutionError` with `RETRYABLE_FAILURE` only when they can establish that retrying is safe, and should use the durable operation idempotency key with providers that support it. This bridge does not implement a provider API, scheduler, or dispatch endpoint.
+`createProviderOperationJobHandler` accepts jobs whose payload contains an `operationId` and whose `tenantId` is set. It claims the tenant-scoped operation, then resolves the operation's explicit `providerConnectionId` through `ProviderConnectionCredentialsService` using the job tenant and requires that connection to remain active. Missing IDs or any credential-resolution failure are recorded as a sanitized permanent pre-execution failure; the executor is not called. Resolved credentials are passed separately to the injected server-side executor and are not copied into the job payload. Duplicate delivery of an already successful operation is a no-op; an `UNKNOWN` operation is blocked until explicit reconciliation. Unclassified executor errors become `UNKNOWN`. Provider adapters may throw `ProviderOperationExecutionError` with `RETRYABLE_FAILURE` only when they can establish that retrying is safe, and should use the durable operation idempotency key with providers that support it. This bridge does not implement a provider API, scheduler, or dispatch endpoint. The required connection column needs a reviewed backfill/upgrade plan before applying it to a populated database; the CI-generated empty-database baseline is not an upgrade migration.
 
 ## Architecture guardrails
 
