@@ -4,7 +4,7 @@ A multi-tenant platform foundation for VPN subscriptions and digital products, d
 
 ## Current status
 
-This repository is an early foundation, not a complete or production-ready product. Database models and a few infrastructure/domain primitives exist; full authentication, authorization, tenant onboarding, storefront, Telegram processing, provider adapters, payment integrations, reporting, migration flows, and production deployment hardening remain incomplete.
+This repository is an early foundation, not a complete or production-ready product. Database models and a few infrastructure/domain primitives exist; Authentication/session primitives, catalog and order services, and authorization primitives have initial implementations; end-to-end authorization coverage, tenant onboarding, storefront, Telegram processing, provider adapters, payment integrations, reporting, migration flows, and production deployment hardening remain incomplete.
 
 ## Stack
 
@@ -18,7 +18,7 @@ This repository is an early foundation, not a complete or production-ready produ
 
 Requirements: Node.js 20.9+ and npm.
 
-1. Install dependencies with npm ci.
+1. Install dependencies with npm install.
 2. Copy .env.example to .env.
 3. Configure DATABASE_URL and DIRECT_URL for a PostgreSQL database.
 4. Generate Prisma client: npm run prisma:generate.
@@ -44,9 +44,9 @@ Do not run db:push or migrations against production without reviewing the genera
 | UPSTASH_REDIS_REST_TOKEN | Upstash Redis REST token |
 | APP_URL | Application base URL |
 | APP_REGION | Preferred deployment region |
-| AUTH_SECRET | Authentication/session secret; authentication flows are not yet implemented |
-| SESSION_COOKIE_NAME | Session cookie name for the future auth layer |
-| SESSION_TTL_SECONDS | Intended session lifetime in seconds |
+| AUTH_SECRET | Reserved for future signed artifacts; opaque sessions currently use random tokens stored as hashes in PostgreSQL |
+| SESSION_COOKIE_NAME | Session cookie name used by login, logout, and current-session endpoints |
+| SESSION_TTL_SECONDS | Session lifetime in seconds (60 seconds to 30 days) |
 | CREDENTIAL_ENCRYPTION_KEY | Base64-encoded 32-byte AES-256-GCM key for provider credentials |
 | INTERNAL_JOB_SECRET | Internal job-dispatch authentication secret; dispatch endpoint is not yet implemented |
 | QSTASH_TOKEN | QStash token for future asynchronous dispatch |
@@ -72,7 +72,7 @@ Never commit real credentials. Rotate any credential accidentally committed to r
 - Never mark an order paid based on a browser redirect or unverified client assertion.
 - Tenant ownership and role/capability checks must be enforced in application services, not inferred from user-controlled request fields.
 - Keep secrets encrypted at rest and never return credentials in API responses or logs.
-- Add cross-tenant access tests before exposing tenant-owned resources through HTTP or Telegram.
+- Cross-tenant access tests are still required before treating the current isolation helpers as production-grade.
 
 ## Tenant database access
 
