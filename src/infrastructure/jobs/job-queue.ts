@@ -134,20 +134,39 @@ export class JobQueue {
     });
   }
 
-  async markSucceeded(jobId: string, workerId: string) {
+  async markSucceeded(jobId: string, workerId: string, now = new Date()) {
+    const leaseCutoff = new Date(now.getTime() - 5 * 60 * 1000);
     return this.db.job.updateMany({
-      where: { id: jobId, status: JobStatus.RUNNING, lockedBy: workerId },
+      where: {
+        id: jobId,
+        status: JobStatus.RUNNING,
+        lockedBy: workerId,
+        lockedAt: { gte: leaseCutoff }
+      },
       data: { status: JobStatus.SUCCEEDED, lockedAt: null, lockedBy: null, lastError: null, lastErrorCode: null }
     });
   }
 
-  async markFailed(jobId: string, workerId: string, error: { code: string; message: string }, retryAt?: Date) {
-    const job = await this.db.job.findFirst({ where: { id: jobId, status: JobStatus.RUNNING, lockedBy: workerId } });
+  async markFailed(
+    jobId: string,
+    workerId: string,
+    error: { code: string; message: string },
+    retryAt?: Date,
+    now = new Date()
+  ) {
+    const leaseCutoff = new Date(now.getTime() - 5 * 60 * 1000);
+    const ownership = {
+      id: jobId,
+      status: JobStatus.RUNNING,
+      lockedBy: workerId,
+      lockedAt: { gte: leaseCutoff }
+    };
+    const job = await this.db.job.findFirst({ where: ownership });
     if (!job) return { count: 0 };
 
     const retryable = job.attempts < job.maxAttempts && retryAt !== undefined;
     return this.db.job.updateMany({
-      where: { id: jobId, status: JobStatus.RUNNING, lockedBy: workerId },
+      where: ownership,
       data: {
         status: retryable ? JobStatus.RETRY_WAIT : JobStatus.FAILED,
         runAt: retryable ? retryAt : job.runAt,

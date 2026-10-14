@@ -258,13 +258,42 @@ describe("durable job queue", () => {
     expect(mocks.jobUpdateMany).not.toHaveBeenCalled();
   });
 
-  it("marks success only for the worker that currently owns the running job", async () => {
+  it("marks success only for the current worker with a live lease", async () => {
     const queue = makeQueue();
+    const now = new Date("2026-10-14T10:03:00.000Z");
 
-    await queue.markSucceeded("job-a", "worker-a");
+    await queue.markSucceeded("job-a", "worker-a", now);
 
     expect(mocks.jobUpdateMany).toHaveBeenCalledWith({
-      where: { id: "job-a", status: JobStatus.RUNNING, lockedBy: "worker-a" },
+      where: {
+        id: "job-a",
+        status: JobStatus.RUNNING,
+        lockedBy: "worker-a",
+        lockedAt: { gte: new Date("2026-10-14T09:58:00.000Z") }
+      },
+      data: {
+        status: JobStatus.SUCCEEDED,
+        lockedAt: null,
+        lockedBy: null,
+        lastError: null,
+        lastErrorCode: null
+      }
+    });
+  });
+
+  it("refuses success from an expired lease even before another worker claims the job", async () => {
+    const queue = makeQueue();
+    const now = new Date("2026-10-14T10:10:00.000Z");
+
+    await queue.markSucceeded("job-a", "worker-a", now);
+
+    expect(mocks.jobUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: "job-a",
+        status: JobStatus.RUNNING,
+        lockedBy: "worker-a",
+        lockedAt: { gte: new Date("2026-10-14T10:05:00.000Z") }
+      },
       data: {
         status: JobStatus.SUCCEEDED,
         lockedAt: null,
@@ -279,13 +308,18 @@ describe("durable job queue", () => {
     const queue = makeQueue();
     const retryAt = new Date("2026-10-14T10:05:00.000Z");
 
-    await queue.markFailed("job-a", "worker-a", { code: "TEMPORARY", message: "Provider unavailable" }, retryAt);
+    const now = new Date("2026-10-14T10:03:00.000Z");
+    await queue.markFailed("job-a", "worker-a", { code: "TEMPORARY", message: "Provider unavailable" }, retryAt, now);
 
-    expect(mocks.jobFindFirst).toHaveBeenCalledWith({
-      where: { id: "job-a", status: JobStatus.RUNNING, lockedBy: "worker-a" }
-    });
+    const ownership = {
+      id: "job-a",
+      status: JobStatus.RUNNING,
+      lockedBy: "worker-a",
+      lockedAt: { gte: new Date("2026-10-14T09:58:00.000Z") }
+    };
+    expect(mocks.jobFindFirst).toHaveBeenCalledWith({ where: ownership });
     expect(mocks.jobUpdateMany).toHaveBeenCalledWith({
-      where: { id: "job-a", status: JobStatus.RUNNING, lockedBy: "worker-a" },
+      where: ownership,
       data: {
         status: JobStatus.RETRY_WAIT,
         runAt: retryAt,
@@ -307,13 +341,19 @@ describe("durable job queue", () => {
     });
     const queue = makeQueue();
 
+    const now = new Date("2026-10-14T10:03:00.000Z");
     await queue.markFailed("job-a", "worker-a", {
       code: "E".repeat(150),
       message: "M".repeat(2200)
-    }, new Date("2026-10-14T10:05:00.000Z"));
+    }, new Date("2026-10-14T10:05:00.000Z"), now);
 
     expect(mocks.jobUpdateMany).toHaveBeenCalledWith({
-      where: { id: "job-a", status: JobStatus.RUNNING, lockedBy: "worker-a" },
+      where: {
+        id: "job-a",
+        status: JobStatus.RUNNING,
+        lockedBy: "worker-a",
+        lockedAt: { gte: new Date("2026-10-14T09:58:00.000Z") }
+      },
       data: {
         status: JobStatus.FAILED,
         runAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -329,7 +369,13 @@ describe("durable job queue", () => {
     mocks.jobFindFirst.mockResolvedValue(null);
     const queue = makeQueue();
 
-    await expect(queue.markFailed("job-a", "worker-old", { code: "TEMP", message: "stale" })).resolves.toEqual({ count: 0 });
+    await expect(queue.markFailed(
+      "job-a",
+      "worker-old",
+      { code: "TEMP", message: "stale" },
+      undefined,
+      new Date("2026-10-14T10:03:00.000Z")
+    )).resolves.toEqual({ count: 0 });
     expect(mocks.jobUpdateMany).not.toHaveBeenCalled();
   });
 });
