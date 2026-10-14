@@ -29,9 +29,16 @@ export class OrderService {
     const existing = await this.db.order.findFirst({
       where: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey }
     });
-    if (existing) return { order: existing, duplicate: true };
+    if (existing) {
+      const items = await this.db.orderItem.findMany({
+        where: { tenantId: input.tenantId, orderId: existing.id },
+        orderBy: { createdAt: "asc" }
+      });
+      return { order: { ...existing, items }, duplicate: true };
+    }
 
-    return this.db.$transaction(async (tx) => {
+    try {
+      return await this.db.$transaction(async (tx) => {
       const tenant = await tx.tenant.findFirst({
         where: { id: input.tenantId, status: TenantStatus.ACTIVE },
         select: { id: true }
@@ -125,14 +132,28 @@ export class OrderService {
       });
 
       return { order: { ...order, items }, duplicate: false };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const existingOrder = await this.db.order.findFirst({
+          where: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey }
+        });
+        if (existingOrder) {
+          const items = await this.db.orderItem.findMany({
+            where: { tenantId: input.tenantId, orderId: existingOrder.id },
+            orderBy: { createdAt: "asc" }
+          });
+          return { order: { ...existingOrder, items }, duplicate: true };
+        }
+      }
+      throw error;
+    }
   }
 
   async getById(tenantId: string, orderId: string) {
     if (!tenantId.trim() || !orderId.trim()) throw new Error("Tenant and order IDs are required.");
     const order = await this.db.order.findFirst({
-      where: { id: orderId, tenantId },
-      include: { }
+      where: { id: orderId, tenantId }
     });
     if (!order) return null;
     const items = await this.db.orderItem.findMany({
