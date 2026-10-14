@@ -50,3 +50,11 @@ Before registering a production adapter or exposing a dispatch endpoint:
 - Test reconciliation and recovery against a provider sandbox before enabling real side effects.
 
 The current repository provides execution primitives and registries, not these vendor-specific guarantees. Do not enable real provider calls until a concrete adapter satisfies this contract.
+
+## Current schema integration gap
+
+The current `ProviderOperation` model does not contain a `providerConnectionId` relation or field. The credential resolver therefore cannot yet select a connection from an operation in a safe, deterministic way. Do not work around this by putting credential material in `requestPayload`, selecting a connection by an untrusted provider name, or choosing the first active connection.
+
+Before wiring a concrete executor, add an explicit tenant-scoped association between each provider operation and the intended provider connection (or another reviewed, immutable routing record). Validate that the selected connection belongs to the operation's tenant and supports the requested action. Treat the association as part of idempotency validation so a duplicate operation key cannot silently switch provider accounts. Implement the schema change with a reviewed Prisma migration and tests for cross-tenant references, missing/inactive connections, and conflicting idempotent requests.
+
+The new credential resolver is a building block only; it is not yet connected to the worker or executor registry.
