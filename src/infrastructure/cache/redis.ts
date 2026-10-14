@@ -8,6 +8,12 @@ type CacheEntry = {
 const localStore = new Map<string, CacheEntry>();
 const DEFAULT_TTL_SECONDS = 300;
 
+function validateTtlSeconds(ttlSeconds: number): void {
+  if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) {
+    throw new Error("Cache TTL must be a positive integer number of seconds.");
+  }
+}
+
 let redisClient: Redis | null | undefined;
 
 function getRedisClient(): Redis | null {
@@ -59,6 +65,7 @@ export const cache = {
   },
 
   async set<T>(key: string, value: T, ttlSeconds = DEFAULT_TTL_SECONDS): Promise<void> {
+    validateTtlSeconds(ttlSeconds);
     const serialized = JSON.stringify(value);
     const redis = getRedisClient();
 
@@ -71,6 +78,7 @@ export const cache = {
   },
 
   async setIfAbsent<T>(key: string, value: T, ttlSeconds: number): Promise<boolean> {
+    validateTtlSeconds(ttlSeconds);
     const serialized = JSON.stringify(value);
     const redis = getRedisClient();
 
@@ -126,6 +134,7 @@ export const cache = {
   },
 
   async increment(key: string, ttlSeconds: number): Promise<number> {
+    validateTtlSeconds(ttlSeconds);
     const redis = getRedisClient();
 
     if (redis) {
