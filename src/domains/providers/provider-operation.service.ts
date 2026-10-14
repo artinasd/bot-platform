@@ -1,9 +1,10 @@
-import { Prisma, PrismaClient, ProviderOperationStatus } from "@prisma/client";
+import { Prisma, PrismaClient, ProviderOperationStatus, RecordStatus } from "@prisma/client";
 
 export type CreateProviderOperationInput = {
   tenantId: string;
   orderId: string;
   itemId: string;
+  providerConnectionId: string;
   action: string;
   idempotencyKey: string;
   requestPayload?: Prisma.InputJsonValue;
@@ -31,12 +32,14 @@ function validateRequired(value: string, label: string, maxLength = 200) {
 function assertSameRequest(existing: {
   orderId: string;
   itemId: string;
+  providerConnectionId: string;
   action: string;
   requestPayload: unknown;
 }, input: CreateProviderOperationInput, requestPayload: Prisma.InputJsonValue) {
   if (
     existing.orderId !== input.orderId ||
     existing.itemId !== input.itemId ||
+    existing.providerConnectionId !== input.providerConnectionId ||
     existing.action !== input.action ||
     stableJson(existing.requestPayload) !== stableJson(requestPayload)
   ) {
@@ -51,6 +54,7 @@ export class ProviderOperationService {
     validateRequired(input.tenantId, "Tenant ID");
     validateRequired(input.orderId, "Order ID");
     validateRequired(input.itemId, "Order item ID");
+    validateRequired(input.providerConnectionId, "Provider connection ID");
     validateRequired(input.action, "Provider action", 100);
     validateRequired(input.idempotencyKey, "Idempotency key");
 
@@ -63,6 +67,18 @@ export class ProviderOperationService {
         if (existing) {
           assertSameRequest(existing, input, requestPayload);
           return { operation: existing, duplicate: true };
+        }
+
+        const connection = await tx.providerConnection.findFirst({
+          where: {
+            id: input.providerConnectionId,
+            tenantId: input.tenantId,
+            status: RecordStatus.ACTIVE
+          },
+          select: { id: true }
+        });
+        if (!connection) {
+          throw new Error("Active provider connection was not found in this tenant.");
         }
 
         const order = await tx.order.findFirst({
@@ -82,6 +98,7 @@ export class ProviderOperationService {
             tenantId: input.tenantId,
             orderId: input.orderId,
             itemId: input.itemId,
+            providerConnectionId: input.providerConnectionId,
             action: input.action,
             idempotencyKey: input.idempotencyKey,
             requestPayload

@@ -7,7 +7,8 @@ const mocks = vi.hoisted(() => ({
   operationCreate: vi.fn(),
   operationUpdateMany: vi.fn(),
   orderFindFirst: vi.fn(),
-  itemFindFirst: vi.fn()
+  itemFindFirst: vi.fn(),
+  providerConnectionFindFirst: vi.fn()
 }));
 
 function makeService() {
@@ -17,7 +18,8 @@ function makeService() {
       create: mocks.operationCreate
     },
     order: { findFirst: mocks.orderFindFirst },
-    orderItem: { findFirst: mocks.itemFindFirst }
+    orderItem: { findFirst: mocks.itemFindFirst },
+    providerConnection: { findFirst: mocks.providerConnectionFindFirst }
   };
   const db = {
     providerOperation: { findFirst: mocks.operationFindFirst, updateMany: mocks.operationUpdateMany },
@@ -30,6 +32,7 @@ const input = {
   tenantId: "tenant-a",
   orderId: "order-a",
   itemId: "item-a",
+  providerConnectionId: "connection-a",
   action: "provision",
   idempotencyKey: "provision-order-a-item-a",
   requestPayload: { plan: "basic", seats: 2 }
@@ -40,6 +43,7 @@ const existingOperation = {
   tenantId: "tenant-a",
   orderId: "order-a",
   itemId: "item-a",
+  providerConnectionId: "connection-a",
   action: "provision",
   idempotencyKey: "provision-order-a-item-a",
   requestPayload: { seats: 2, plan: "basic" },
@@ -55,6 +59,7 @@ describe("provider operation service", () => {
     mocks.operationUpdateMany.mockResolvedValue({ count: 1 });
     mocks.orderFindFirst.mockResolvedValue({ id: "order-a" });
     mocks.itemFindFirst.mockResolvedValue({ id: "item-a" });
+    mocks.providerConnectionFindFirst.mockResolvedValue({ id: "connection-a" });
   });
 
   it("validates required identifiers before database access", async () => {
@@ -82,6 +87,7 @@ describe("provider operation service", () => {
         tenantId: "tenant-a",
         orderId: "order-a",
         itemId: "item-a",
+        providerConnectionId: "connection-a",
         action: "provision",
         idempotencyKey: "provision-order-a-item-a",
         requestPayload: { plan: "basic", seats: 2 }
@@ -108,6 +114,7 @@ describe("provider operation service", () => {
       requestPayload: { plan: "premium", seats: 2 }
     })).rejects.toThrow(/different provider operation/);
     await expect(service.create({ ...input, itemId: "another-item" })).rejects.toThrow(/different provider operation/);
+    await expect(service.create({ ...input, providerConnectionId: "connection-b" })).rejects.toThrow(/different provider operation/);
   });
 
   it("rejects orders not owned by the requested tenant", async () => {
