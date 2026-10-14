@@ -126,6 +126,7 @@ model Tenant {
   domains           Domain[]
   telegramBots      TelegramBot[]
   users             User[]
+  sessions          Session[]
   staffMembers      StaffMember[]
   customers         Customer[]
   customerGroups    CustomerGroup[]
@@ -239,6 +240,7 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   tenant         Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessions       Session[]
   @@unique([tenantId, email])
   @@index([tenantId, status])
 }
@@ -967,4 +969,22 @@ model CustomerTag {
   createdAt   DateTime @default(now())
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   @@unique([tenantId, name])
+}
+
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  tenantId    String?
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  ipHash      String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+  @@index([tenantId, expiresAt])
 }
