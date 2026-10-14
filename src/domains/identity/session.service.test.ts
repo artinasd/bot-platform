@@ -52,6 +52,16 @@ describe("session tenant membership validation", () => {
     service = new SessionService(db as unknown as PrismaClient);
   });
 
+
+  it("rejects oversized session tokens before querying the database", async () => {
+    const result = await service.resolve("x".repeat(257));
+
+    expect(result).toBeNull();
+    expect(db.session.findFirst).not.toHaveBeenCalled();
+    expect(db.staffMember.findFirst).not.toHaveBeenCalled();
+    expect(db.customer.findFirst).not.toHaveBeenCalled();
+  });
+
   it("revokes a tenant session when the user no longer has active membership", async () => {
     const result = await service.resolve("valid-session-token");
 
