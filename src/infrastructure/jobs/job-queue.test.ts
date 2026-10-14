@@ -60,6 +60,9 @@ describe("durable job queue", () => {
     await expect(queue.enqueue({ ...enqueueInput, type: " " })).rejects.toThrow("Job type is required.");
     await expect(queue.enqueue({ ...enqueueInput, idempotencyKey: " " })).rejects.toThrow("Job idempotency key is required.");
     await expect(queue.enqueue({ ...enqueueInput, correlationId: " " })).rejects.toThrow("Job correlation ID is required.");
+    await expect(queue.enqueue({ ...enqueueInput, maxAttempts: 0 })).rejects.toThrow("Job max attempts must be a positive integer.");
+    await expect(queue.enqueue({ ...enqueueInput, maxAttempts: -1 })).rejects.toThrow("Job max attempts must be a positive integer.");
+    await expect(queue.enqueue({ ...enqueueInput, maxAttempts: 1.5 })).rejects.toThrow("Job max attempts must be a positive integer.");
     expect(mocks.jobUpsert).not.toHaveBeenCalled();
   });
 
