@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 
 const TENANT_SCOPED_MODELS = new Set([
   "User",
+  "Session",
   "Job",
   "Event",
   "AuditLog",
