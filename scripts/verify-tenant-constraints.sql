@@ -44,7 +44,20 @@ VALUES
   ('payment-fk-a', 'tenant-fk-a', 'order-fk-a', 100, 'payment-fk-a', 'test', CURRENT_TIMESTAMP),
   ('payment-fk-b', 'tenant-fk-b', 'order-fk-b', 100, 'payment-fk-b', 'test', CURRENT_TIMESTAMP);
 
-DO $$
+INSERT INTO "Subscription" ("id", "tenantId", "customerId", "productId", "name", "updatedAt")
+VALUES ('subscription-fk-a', 'tenant-fk-a', 'customer-fk-a', 'product-fk-a', 'Subscription A', CURRENT_TIMESTAMP);
+
+INSERT INTO "Wallet" ("id", "tenantId", "ownerType", "ownerId", "updatedAt")
+VALUES
+  ('wallet-fk-a', 'tenant-fk-a', 'customer', 'customer-fk-a', CURRENT_TIMESTAMP),
+  ('wallet-fk-b', 'tenant-fk-b', 'customer', 'customer-fk-b', CURRENT_TIMESTAMP);
+
+INSERT INTO "SupportTicket" ("id", "tenantId", "customerId", "subject", "updatedAt")
+VALUES
+  ('ticket-fk-a', 'tenant-fk-a', 'customer-fk-a', 'Ticket A', CURRENT_TIMESTAMP),
+  ('ticket-fk-b', 'tenant-fk-b', 'customer-fk-b', 'Ticket B', CURRENT_TIMESTAMP);
+
+DO $
 BEGIN
   BEGIN
     INSERT INTO "Order" (
@@ -142,6 +155,38 @@ BEGIN
   EXCEPTION WHEN foreign_key_violation THEN
     NULL;
   END;
-END $$;
+
+  BEGIN
+    INSERT INTO "SubscriptionConfiguration" ("id", "tenantId", "subscriptionId", "label")
+    VALUES ('config-fk-invalid-subscription', 'tenant-fk-b', 'subscription-fk-a', 'Invalid tenant config');
+    RAISE EXCEPTION 'Expected the database to reject a subscription configuration referencing another tenant subscription';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "WalletTransaction" ("id", "tenantId", "walletId", "type", "amountMinor", "idempotencyKey")
+    VALUES ('wallet-tx-fk-invalid-wallet', 'tenant-fk-a', 'wallet-fk-b', 'CREDIT', 100, 'wallet-tx-fk-invalid-wallet');
+    RAISE EXCEPTION 'Expected the database to reject a wallet transaction referencing another tenant wallet';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "LedgerEntry" ("id", "tenantId", "walletId", "entryType", "amountMinor", "idempotencyKey")
+    VALUES ('ledger-fk-invalid-wallet', 'tenant-fk-a', 'wallet-fk-b', 'CREDIT', 100, 'ledger-fk-invalid-wallet');
+    RAISE EXCEPTION 'Expected the database to reject a ledger entry referencing another tenant wallet';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "SupportMessage" ("id", "tenantId", "ticketId", "senderType", "body")
+    VALUES ('message-fk-invalid-ticket', 'tenant-fk-a', 'ticket-fk-b', 'customer', 'Invalid tenant message');
+    RAISE EXCEPTION 'Expected the database to reject a support message referencing another tenant ticket';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+END $;
 
 ROLLBACK;

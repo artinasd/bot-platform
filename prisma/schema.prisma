@@ -456,6 +456,8 @@ model Subscription {
   product        Product  @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
   order          Order?   @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
   plan           Plan?    @relation(fields: [tenantId, productId, planId], references: [tenantId, productId, id], onDelete: Restrict)
+  configurations SubscriptionConfiguration[]
+  @@unique([tenantId, id])
   @@index([tenantId, customerId, status])
   @@index([tenantId, expiresAt])
 }
@@ -470,7 +472,8 @@ model SubscriptionConfiguration {
   configuration  Json     @default("{}")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription   Subscription @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Cascade)
   @@index([tenantId, subscriptionId])
 }
 
@@ -584,6 +587,9 @@ model Wallet {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions  WalletTransaction[]
+  ledgerEntries LedgerEntry[]
+  @@unique([tenantId, id])
   @@unique([tenantId, ownerType, ownerId, currency])
 }
 
@@ -600,6 +606,7 @@ model WalletTransaction {
   description     String?
   createdAt       DateTime @default(now())
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  wallet          Wallet   @relation(fields: [tenantId, walletId], references: [tenantId, id], onDelete: Cascade)
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, walletId, createdAt])
 }
@@ -754,6 +761,8 @@ model SupportTicket {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages    SupportMessage[]
+  @@unique([tenantId, id])
   @@index([tenantId, status, priority, createdAt])
 }
 
@@ -767,7 +776,8 @@ model SupportMessage {
   attachments Json     @default("[]")
   internal    Boolean  @default(false)
   createdAt   DateTime @default(now())
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticket      SupportTicket @relation(fields: [tenantId, ticketId], references: [tenantId, id], onDelete: Cascade)
   @@index([tenantId, ticketId, createdAt])
 }
 
@@ -921,6 +931,7 @@ model LedgerEntry {
   metadata       Json     @default("{}")
   createdAt      DateTime @default(now())
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  wallet         Wallet?  @relation(fields: [tenantId, walletId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, walletId, createdAt])
   @@index([tenantId, referenceType, referenceId])
