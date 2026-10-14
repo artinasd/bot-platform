@@ -22,7 +22,14 @@ function createHarness(tenantId = "tenant-a") {
     }
   } as unknown as PrismaClient;
 
-  createTenantClient(prisma, tenantId);
+  const defineExtensionSpy = vi
+    .spyOn(Prisma, "defineExtension")
+    .mockImplementation((extension) => extension as never);
+  try {
+    createTenantClient(prisma, tenantId);
+  } finally {
+    defineExtensionSpy.mockRestore();
+  }
   if (!handler) throw new Error("Tenant query extension was not registered.");
   return handler;
 }
