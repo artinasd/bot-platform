@@ -8,7 +8,7 @@ This document defines the integration boundary for provider adapters. It does no
 
 The provider-operation handler claims the tenant-scoped operation, then resolves `providerConnectionId` through `ProviderConnectionCredentialsService` using the job tenant immediately before invoking an injected executor. The executor receives the persisted `ProviderOperation` and the resolved active connection credentials as separate server-side arguments. The executor returns a JSON-compatible response payload or throws `ProviderOperationExecutionError`. If the connection ID is absent, inactive, revoked, cross-tenant, or cannot be decrypted, the handler records a permanent pre-execution failure and never calls the executor; raw resolver errors are not persisted.
 
-Persisted `action` names are routed by the explicit executor registry. An action that is not registered fails closed. Do not map arbitrary user input directly to a provider method.
+Executors are registered by the exact pair of resolved connection `providerType` and persisted operation `action`. This prevents an action registered for one vendor from accidentally receiving another vendor's credentials. Unsupported provider/action pairs fail closed. Do not map arbitrary user input directly to a provider method.
 
 ## Required adapter behavior
 
