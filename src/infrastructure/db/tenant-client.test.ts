@@ -90,6 +90,20 @@ describe("tenant-scoped Prisma client", () => {
     ]);
   });
 
+  it("rejects nested relation writes before they can bypass tenant checks", async () => {
+    const handler = createHarness();
+    const query = vi.fn(async (received: QueryArgs) => received);
+
+    await expect(handler({
+      model: "Product",
+      operation: "create",
+      args: { data: { name: "cross-tenant", tenant: { connect: { id: "tenant-b" } } } },
+      query
+    })).rejects.toThrow(/nested relation writes/i);
+
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("rejects unsupported models instead of silently running unscoped", async () => {
     const handler = createHarness();
     const query = vi.fn(async () => "should not run");
