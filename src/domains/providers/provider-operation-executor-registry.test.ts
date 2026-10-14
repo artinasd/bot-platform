@@ -31,9 +31,10 @@ describe("provider-operation executor registry", () => {
 
   it("validates action-specific request payloads before invoking the executor", async () => {
     const execute = vi.fn().mockResolvedValue({ providerRef: "provider-ref-a" });
-    const validateRequestPayload = createStrictProviderRequestPayloadValidator({
+    const strictValidator = createStrictProviderRequestPayloadValidator({
       plan: z.string().trim().min(1).max(80)
     });
+    const validateRequestPayload = vi.fn(strictValidator);
     const registry = createProviderOperationExecutorRegistry([
       { providerType: "TEST", action: "subscription.create", validateRequestPayload, execute }
     ]);
