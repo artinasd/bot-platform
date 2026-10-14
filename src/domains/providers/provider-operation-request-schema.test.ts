@@ -4,7 +4,7 @@ import { createStrictProviderRequestPayloadValidator } from "./provider-operatio
 
 describe("strict provider request schema", () => {
   const validate = createStrictProviderRequestPayloadValidator({
-    plan: z.string().trim().min(1).max(80),
+    plan: z.string().min(1).max(80).refine((value) => value.trim().length > 0),
     seats: z.number().int().min(1).max(100)
   });
 
@@ -17,6 +17,7 @@ describe("strict provider request schema", () => {
     [],
     "starter",
     { plan: "", seats: 1 },
+    { plan: "   ", seats: 1 },
     { plan: "starter", seats: 0 },
     { plan: "starter", seats: 1.5 },
     { plan: "starter", seats: 1, admin: true },

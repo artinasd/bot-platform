@@ -32,7 +32,7 @@ describe("provider-operation executor registry", () => {
   it("validates action-specific request payloads before invoking the executor", async () => {
     const execute = vi.fn().mockResolvedValue({ providerRef: "provider-ref-a" });
     const strictValidator = createStrictProviderRequestPayloadValidator({
-      plan: z.string().trim().min(1).max(80)
+      plan: z.string().min(1).max(80).refine((value) => value.trim().length > 0)
     });
     const validateRequestPayload = vi.fn(strictValidator);
     const registry = createProviderOperationExecutorRegistry([
@@ -42,7 +42,8 @@ describe("provider-operation executor registry", () => {
     await expect(registry(invalidOperation, credentials)).rejects.toMatchObject({
       name: "ProviderOperationExecutionError",
       status: ProviderOperationStatus.PERMANENT_FAILURE,
-      code: "PROVIDER_REQUEST_INVALID"
+      code: "PROVIDER_REQUEST_INVALID",
+      message: "Provider operation request payload failed action-specific validation."
     });
     expect(validateRequestPayload).toHaveBeenCalledWith(invalidOperation.requestPayload);
     expect(execute).not.toHaveBeenCalled();
