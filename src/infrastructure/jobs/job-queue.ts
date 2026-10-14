@@ -17,6 +17,9 @@ export class JobQueue {
     if (!input.type.trim()) throw new Error("Job type is required.");
     if (!input.idempotencyKey.trim()) throw new Error("Job idempotency key is required.");
     if (!input.correlationId.trim()) throw new Error("Job correlation ID is required.");
+    if (input.maxAttempts !== undefined && (!Number.isSafeInteger(input.maxAttempts) || input.maxAttempts <= 0)) {
+      throw new Error("Job max attempts must be a positive integer.");
+    }
 
     return this.db.job.upsert({
       where: { idempotencyKey: input.idempotencyKey },
