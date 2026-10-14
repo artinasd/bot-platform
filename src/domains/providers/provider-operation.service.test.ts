@@ -74,6 +74,10 @@ describe("provider operation service", () => {
       operation: existingOperation,
       duplicate: false
     });
+    expect(mocks.providerConnectionFindFirst).toHaveBeenCalledWith({
+      where: { id: "connection-a", tenantId: "tenant-a", status: "ACTIVE" },
+      select: { id: true }
+    });
     expect(mocks.orderFindFirst).toHaveBeenCalledWith({
       where: { id: "order-a", tenantId: "tenant-a" },
       select: { id: true }
@@ -115,6 +119,19 @@ describe("provider operation service", () => {
     })).rejects.toThrow(/different provider operation/);
     await expect(service.create({ ...input, itemId: "another-item" })).rejects.toThrow(/different provider operation/);
     await expect(service.create({ ...input, providerConnectionId: "connection-b" })).rejects.toThrow(/different provider operation/);
+  });
+
+
+  it("rejects an inactive or cross-tenant provider connection", async () => {
+    mocks.providerConnectionFindFirst.mockResolvedValue(null);
+    const service = makeService();
+    await expect(service.create(input)).rejects.toThrow(/Active provider connection was not found in this tenant/);
+    expect(mocks.providerConnectionFindFirst).toHaveBeenCalledWith({
+      where: { id: "connection-a", tenantId: "tenant-a", status: "ACTIVE" },
+      select: { id: true }
+    });
+    expect(mocks.orderFindFirst).not.toHaveBeenCalled();
+    expect(mocks.operationCreate).not.toHaveBeenCalled();
   });
 
   it("rejects orders not owned by the requested tenant", async () => {

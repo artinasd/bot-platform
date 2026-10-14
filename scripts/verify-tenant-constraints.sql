@@ -80,10 +80,15 @@ VALUES
 INSERT INTO "MigrationRecord" ("id", "tenantId", "migrationJobId", "entityType", "sourceId")
 VALUES ('migration-record-fk-a', 'tenant-fk-a', 'migration-job-fk-a', 'customer', 'source-a');
 
-INSERT INTO "ProviderOperation" ("id", "tenantId", "orderId", "itemId", "action", "idempotencyKey", "updatedAt")
+INSERT INTO "ProviderConnection" ("id", "tenantId", "name", "providerType", "credentialCiphertext", "status", "updatedAt")
 VALUES
-  ('provider-op-fk-a', 'tenant-fk-a', 'order-fk-a', 'item-fk-a', 'provision', 'provider-op-fk-a', CURRENT_TIMESTAMP),
-  ('provider-op-fk-b', 'tenant-fk-b', 'order-fk-b', 'item-fk-b', 'provision', 'provider-op-fk-b', CURRENT_TIMESTAMP);
+  ('provider-connection-fk-a', 'tenant-fk-a', 'Provider connection A', 'test', 'cipher-a', 'ACTIVE', CURRENT_TIMESTAMP),
+  ('provider-connection-fk-b', 'tenant-fk-b', 'Provider connection B', 'test', 'cipher-b', 'ACTIVE', CURRENT_TIMESTAMP);
+
+INSERT INTO "ProviderOperation" ("id", "tenantId", "orderId", "itemId", "providerConnectionId", "action", "idempotencyKey", "updatedAt")
+VALUES
+  ('provider-op-fk-a', 'tenant-fk-a', 'order-fk-a', 'item-fk-a', 'provider-connection-fk-a', 'provision', 'provider-op-fk-a', CURRENT_TIMESTAMP),
+  ('provider-op-fk-b', 'tenant-fk-b', 'order-fk-b', 'item-fk-b', 'provider-connection-fk-b', 'provision', 'provider-op-fk-b', CURRENT_TIMESTAMP);
 
 INSERT INTO "SupportTicket" ("id", "tenantId", "customerId", "subject", "updatedAt")
 VALUES
@@ -128,17 +133,26 @@ BEGIN
   END;
 
   BEGIN
-    INSERT INTO "ProviderOperation" ("id", "tenantId", "orderId", "itemId", "action", "idempotencyKey", "updatedAt")
-    VALUES ('provider-op-fk-invalid-order', 'tenant-fk-a', 'order-fk-b', 'item-fk-a', 'provision', 'provider-op-fk-invalid-order', CURRENT_TIMESTAMP);
+    INSERT INTO "ProviderOperation" ("id", "tenantId", "orderId", "itemId", "providerConnectionId", "action", "idempotencyKey", "updatedAt")
+    VALUES ('provider-op-fk-invalid-order', 'tenant-fk-a', 'order-fk-b', 'item-fk-a', 'provider-connection-fk-a', 'provision', 'provider-op-fk-invalid-order', CURRENT_TIMESTAMP);
     RAISE EXCEPTION 'Expected the database to reject a provider operation referencing another tenant order';
   EXCEPTION WHEN foreign_key_violation THEN
     NULL;
   END;
 
   BEGIN
-    INSERT INTO "ProviderOperation" ("id", "tenantId", "orderId", "itemId", "action", "idempotencyKey", "updatedAt")
-    VALUES ('provider-op-fk-invalid-item', 'tenant-fk-a', 'order-fk-a', 'item-fk-b', 'provision', 'provider-op-fk-invalid-item', CURRENT_TIMESTAMP);
+    INSERT INTO "ProviderOperation" ("id", "tenantId", "orderId", "itemId", "providerConnectionId", "action", "idempotencyKey", "updatedAt")
+    VALUES ('provider-op-fk-invalid-item', 'tenant-fk-a', 'order-fk-a', 'item-fk-b', 'provider-connection-fk-a', 'provision', 'provider-op-fk-invalid-item', CURRENT_TIMESTAMP);
     RAISE EXCEPTION 'Expected the database to reject a provider operation referencing another tenant order item';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+
+  BEGIN
+    INSERT INTO "ProviderOperation" ("id", "tenantId", "orderId", "itemId", "providerConnectionId", "action", "idempotencyKey", "updatedAt")
+    VALUES ('provider-op-fk-invalid-connection', 'tenant-fk-a', 'order-fk-a', 'item-fk-a', 'provider-connection-fk-b', 'provision', 'provider-op-fk-invalid-connection', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected the database to reject a provider connection belonging to another tenant';
   EXCEPTION WHEN foreign_key_violation THEN
     NULL;
   END;
