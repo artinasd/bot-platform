@@ -17,6 +17,21 @@ describe("cache local fallback", () => {
     await expect(cache.get("test:cache:missing")).resolves.toBeNull();
   });
 
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid TTL %s before writing to the cache",
+    async (ttlSeconds) => {
+      await expect(cache.set("test:cache:invalid-ttl", "value", ttlSeconds)).rejects.toThrow(
+        "Cache TTL must be a positive integer number of seconds."
+      );
+      await expect(cache.setIfAbsent("test:cache:invalid-ttl", "value", ttlSeconds)).rejects.toThrow(
+        "Cache TTL must be a positive integer number of seconds."
+      );
+      await expect(cache.increment("test:cache:invalid-ttl", ttlSeconds)).rejects.toThrow(
+        "Cache TTL must be a positive integer number of seconds."
+      );
+    }
+  );
+
   it("only allows the first set-if-absent operation", async () => {
     const first = await cache.setIfAbsent("test:cache:once", { accepted: true }, 60);
     const second = await cache.setIfAbsent("test:cache:once", { accepted: false }, 60);
