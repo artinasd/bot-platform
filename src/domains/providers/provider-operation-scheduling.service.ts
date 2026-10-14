@@ -5,6 +5,10 @@ import { JobQueue } from "../../infrastructure/jobs/job-queue";
 
 export const PROVIDER_OPERATION_JOB_TYPE = "provider.operation.execute";
 
+function isOperationSucceeded(status: ProviderOperationStatus): boolean {
+  return status === ProviderOperationStatus.SUCCEEDED;
+}
+
 export type ScheduleProviderOperationInput = CreateProviderOperationInput & {
   runAt?: Date;
   maxAttempts?: number;
@@ -60,7 +64,7 @@ export class ProviderOperationSchedulingService {
         `Provider operation job is already terminal (${job.status}); explicit requeue is required.`
       );
     }
-    if (job.status === JobStatus.SUCCEEDED && operation.status !== ProviderOperationStatus.SUCCEEDED) {
+    if (job.status === JobStatus.SUCCEEDED && !isOperationSucceeded(operation.status)) {
       throw new Error("Provider operation job succeeded while the operation is not successful; reconcile before proceeding.");
     }
 
