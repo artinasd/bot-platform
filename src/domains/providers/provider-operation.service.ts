@@ -153,6 +153,49 @@ export class ProviderOperationService {
     return result.count === 1;
   }
 
+  async resolveUnknown(
+    tenantId: string,
+    operationId: string,
+    resolution:
+      | { status: typeof ProviderOperationStatus.SUCCEEDED; responsePayload?: Prisma.InputJsonValue }
+      | { status: typeof ProviderOperationStatus.RETRYABLE_FAILURE | typeof ProviderOperationStatus.PERMANENT_FAILURE; errorMessage: string }
+  ) {
+    validateRequired(tenantId, "Tenant ID");
+    validateRequired(operationId, "Provider operation ID");
+
+    const data: Prisma.ProviderOperationUpdateManyMutationInput =
+      resolution.status === ProviderOperationStatus.SUCCEEDED
+        ? {
+            status: ProviderOperationStatus.SUCCEEDED,
+            responsePayload: resolution.responsePayload ?? {},
+            lastError: null
+          }
+        : {
+            status: resolution.status,
+            lastError: resolution.errorMessage.slice(0, 2000)
+          };
+
+    if (
+      resolution.status !== ProviderOperationStatus.SUCCEEDED &&
+      !resolution.errorMessage.trim()
+    ) {
+      throw new Error("Reconciliation error message is required.");
+    }
+
+    if (
+      resolution.status !== ProviderOperationStatus.SUCCEEDED &&
+      resolution.errorMessage.length > 2000
+    ) {
+      throw new Error("Reconciliation error message is too long.");
+    }
+
+    const result = await this.db.providerOperation.updateMany({
+      where: { id: operationId, tenantId, status: ProviderOperationStatus.UNKNOWN },
+      data
+    });
+    return result.count === 1;
+  }
+
   async markFailed(
     tenantId: string,
     operationId: string,

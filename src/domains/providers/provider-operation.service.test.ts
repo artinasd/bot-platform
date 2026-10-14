@@ -172,6 +172,46 @@ describe("provider operation service", () => {
     });
   });
 
+  it("resolves unknown outcomes only through an explicit reconciliation decision", async () => {
+    const service = makeService();
+    await expect(service.resolveUnknown("tenant-a", "operation-a", {
+      status: ProviderOperationStatus.SUCCEEDED,
+      responsePayload: { providerRef: "confirmed-ref" }
+    })).resolves.toBe(true);
+    expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
+      where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.UNKNOWN },
+      data: {
+        status: ProviderOperationStatus.SUCCEEDED,
+        responsePayload: { providerRef: "confirmed-ref" },
+        lastError: null
+      }
+    });
+  });
+
+  it("can return an unknown operation to retryable only after reconciliation confirms no side effect", async () => {
+    const service = makeService();
+    await expect(service.resolveUnknown("tenant-a", "operation-a", {
+      status: ProviderOperationStatus.RETRYABLE_FAILURE,
+      errorMessage: "Provider confirms request was not applied"
+    })).resolves.toBe(true);
+    expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
+      where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.UNKNOWN },
+      data: {
+        status: ProviderOperationStatus.RETRYABLE_FAILURE,
+        lastError: "Provider confirms request was not applied"
+      }
+    });
+  });
+
+  it("does not resolve unknown operations belonging to another tenant or already transitioned", async () => {
+    mocks.operationUpdateMany.mockResolvedValue({ count: 0 });
+    const service = makeService();
+    await expect(service.resolveUnknown("tenant-b", "operation-a", {
+      status: ProviderOperationStatus.PERMANENT_FAILURE,
+      errorMessage: "Provider rejected request"
+    })).resolves.toBe(false);
+  });
+
   it("rejects invalid failure states and empty errors", async () => {
     const service = makeService();
     await expect(service.markFailed("tenant-a", "operation-a", ProviderOperationStatus.SUCCEEDED as never, "bad")).rejects.toThrow(/Invalid provider operation failure status/);
