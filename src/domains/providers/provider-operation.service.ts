@@ -219,7 +219,9 @@ export class ProviderOperationService {
           }
         : {
             status: resolution.status,
-            lastError: resolution.errorMessage.slice(0, 2000)
+            lastError: resolution.status === ProviderOperationStatus.RETRYABLE_FAILURE
+              ? "Reconciliation confirmed no provider action was applied; retry is safe."
+              : "Reconciliation marked the provider action permanently failed."
           };
 
     if (
@@ -262,7 +264,14 @@ export class ProviderOperationService {
 
     const result = await this.db.providerOperation.updateMany({
       where: { id: operationId, tenantId, status: ProviderOperationStatus.RUNNING },
-      data: { status, lastError: errorMessage.slice(0, 2000) }
+      data: {
+        status,
+        lastError: status === ProviderOperationStatus.RETRYABLE_FAILURE
+          ? "Provider confirmed no action was applied; retry is safe."
+          : status === ProviderOperationStatus.PERMANENT_FAILURE
+            ? "Provider action failed permanently."
+            : "Provider outcome is unknown; reconciliation is required."
+      }
     });
     return result.count === 1;
   }
