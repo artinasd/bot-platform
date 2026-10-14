@@ -382,6 +382,8 @@ model Location {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  servers     VPNServer[]
+  @@unique([tenantId, id])
   @@unique([tenantId, slug])
   @@index([tenantId, status, priority])
 }
@@ -400,6 +402,8 @@ model VPNPanel {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  servers        VPNServer[]
+  @@unique([tenantId, id])
   @@index([tenantId, status, priority])
 }
 
@@ -416,7 +420,10 @@ model VPNServer {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  panel        VPNPanel @relation(fields: [tenantId, panelId], references: [tenantId, id], onDelete: Restrict)
+  location     Location? @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
   @@index([tenantId, panelId, status])
+  @@index([tenantId, locationId])
 }
 
 model ProviderConnection {

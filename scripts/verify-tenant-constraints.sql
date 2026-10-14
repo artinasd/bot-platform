@@ -52,6 +52,21 @@ VALUES
   ('wallet-fk-a', 'tenant-fk-a', 'customer', 'customer-fk-a', CURRENT_TIMESTAMP),
   ('wallet-fk-b', 'tenant-fk-b', 'customer', 'customer-fk-b', CURRENT_TIMESTAMP);
 
+INSERT INTO "VPNPanel" ("id", "tenantId", "name", "providerType", "baseUrl", "credentialCiphertext", "updatedAt")
+VALUES
+  ('panel-fk-a', 'tenant-fk-a', 'Panel A', 'test', 'https://panel-a.invalid', 'cipher-a', CURRENT_TIMESTAMP),
+  ('panel-fk-b', 'tenant-fk-b', 'Panel B', 'test', 'https://panel-b.invalid', 'cipher-b', CURRENT_TIMESTAMP);
+
+INSERT INTO "Location" ("id", "tenantId", "slug", "name", "updatedAt")
+VALUES
+  ('location-fk-a', 'tenant-fk-a', 'location-a', 'Location A', CURRENT_TIMESTAMP),
+  ('location-fk-b', 'tenant-fk-b', 'location-b', 'Location B', CURRENT_TIMESTAMP);
+
+INSERT INTO "VPNServer" ("id", "tenantId", "panelId", "locationId", "name", "updatedAt")
+VALUES
+  ('server-fk-a', 'tenant-fk-a', 'panel-fk-a', 'location-fk-a', 'Server A', CURRENT_TIMESTAMP),
+  ('server-fk-b', 'tenant-fk-b', 'panel-fk-b', 'location-fk-b', 'Server B', CURRENT_TIMESTAMP);
+
 INSERT INTO "SupportTicket" ("id", "tenantId", "customerId", "subject", "updatedAt")
 VALUES
   ('ticket-fk-a', 'tenant-fk-a', 'customer-fk-a', 'Ticket A', CURRENT_TIMESTAMP),
@@ -59,6 +74,22 @@ VALUES
 
 DO $$
 BEGIN
+  BEGIN
+    INSERT INTO "VPNServer" ("id", "tenantId", "panelId", "name", "updatedAt")
+    VALUES ('server-fk-invalid-panel', 'tenant-fk-a', 'panel-fk-b', 'Invalid Panel Server', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected the database to reject a VPN server referencing another tenant panel';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "VPNServer" ("id", "tenantId", "panelId", "locationId", "name", "updatedAt")
+    VALUES ('server-fk-invalid-location', 'tenant-fk-a', 'panel-fk-a', 'location-fk-b', 'Invalid Location Server', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected the database to reject a VPN server referencing another tenant location';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
   BEGIN
     INSERT INTO "Order" (
       "id", "tenantId", "customerId", "orderNumber", "subtotalMinor",
