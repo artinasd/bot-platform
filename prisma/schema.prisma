@@ -274,6 +274,7 @@ model Customer {
   updatedAt       DateTime @updatedAt
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orders           Order[]
+  subscriptions    Subscription[]
   @@unique([tenantId, id])
   @@unique([tenantId, telegramId])
   @@index([tenantId, username])
@@ -337,6 +338,7 @@ model Product {
   tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plans         Plan[]
   orderItems    OrderItem[]
+  subscriptions Subscription[]
   @@unique([tenantId, id])
   @@unique([tenantId, slug])
   @@index([tenantId, type, status])
@@ -362,6 +364,7 @@ model Plan {
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product         Product  @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
   orderItems      OrderItem[]
+  subscriptions   Subscription[]
   @@unique([tenantId, productId, id])
   @@unique([tenantId, slug])
   @@index([tenantId, productId, status])
@@ -449,6 +452,10 @@ model Subscription {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer       Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  product        Product  @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+  order          Order?   @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  plan           Plan?    @relation(fields: [tenantId, productId, planId], references: [tenantId, productId, id], onDelete: Restrict)
   @@index([tenantId, customerId, status])
   @@index([tenantId, expiresAt])
 }
@@ -484,6 +491,9 @@ model Order {
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer       Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
   items          OrderItem[]
+  payments       Payment[]
+  invoices       Invoice[]
+  subscriptions  Subscription[]
   @@unique([tenantId, id])
   @@unique([tenantId, orderNumber])
   @@unique([tenantId, idempotencyKey])
@@ -524,6 +534,10 @@ model Payment {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order          Order    @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  attempts       PaymentAttempt[]
+  refunds        Refund[]
+  @@unique([tenantId, id])
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, orderId, status])
 }
@@ -540,6 +554,7 @@ model PaymentAttempt {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payment        Payment  @relation(fields: [tenantId, paymentId], references: [tenantId, id], onDelete: Cascade)
   @@unique([tenantId, paymentId, attemptNumber])
 }
 
@@ -601,6 +616,7 @@ model Refund {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payment         Payment  @relation(fields: [tenantId, paymentId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, paymentId, status])
 }
@@ -695,6 +711,7 @@ model Invoice {
   dueAt         DateTime?
   metadata      Json     @default("{}")
   tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order         Order?   @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, invoiceNumber])
 }
 
