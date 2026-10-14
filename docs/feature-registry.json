@@ -20,8 +20,8 @@
       "dependencies": [
         "foundation.config"
       ],
-      "implementationStatus": "initial_schema_committed",
-      "testStatus": "not_run",
+      "implementationStatus": "initial_schema_including_sessions_committed",
+      "testStatus": "validation_pending",
       "documentationStatus": "partial"
     },
     {
@@ -56,9 +56,9 @@
       "dependencies": [
         "foundation.database"
       ],
-      "implementationStatus": "planned",
-      "testStatus": "not_started",
-      "documentationStatus": "planned"
+      "implementationStatus": "initial_password_login_registration_and_database_sessions_committed",
+      "testStatus": "tests_added_not_run",
+      "documentationStatus": "partial"
     },
     {
       "id": "identity.authorization",
@@ -93,9 +93,9 @@
       "dependencies": [
         "tenancy.isolation"
       ],
-      "implementationStatus": "schema_only",
-      "testStatus": "not_started",
-      "documentationStatus": "planned"
+      "implementationStatus": "initial_catalog_service_and_public_endpoints_committed",
+      "testStatus": "tests_added_not_run",
+      "documentationStatus": "partial"
     },
     {
       "id": "commerce.orders",
@@ -105,7 +105,7 @@
       "dependencies": [
         "catalog.core"
       ],
-      "implementationStatus": "pricing_and_state_machine_primitives_committed",
+      "implementationStatus": "initial_order_service_and_authenticated_endpoints_committed",
       "testStatus": "tests_added_not_run",
       "documentationStatus": "partial"
     },
@@ -267,7 +267,7 @@
       "dependencies": [
         "foundation.config"
       ],
-      "implementationStatus": "workflow_committed",
+      "implementationStatus": "github_actions_workflow_committed",
       "testStatus": "pending_ci_run",
       "documentationStatus": "partial"
     }
