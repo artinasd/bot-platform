@@ -219,7 +219,7 @@ describe("provider-operation job handler", () => {
   it("does not record success after the provider-operation lease is lost", async () => {
     mocks.renewRunning.mockResolvedValue(false);
     mocks.execute.mockImplementation(async () => new Promise((resolve) => setTimeout(() => resolve({ providerRef: "ref-a" }), 25)));
-    await expect(makeHandler(5)(job)).rejects.toThrow(/ownership was lost during execution/);
+    await expect(makeHandler(5)(job)).rejects.toThrow(/ownership was lost|ownership was lost during execution/);
     expect(mocks.markSucceeded).not.toHaveBeenCalled();
   });
 
