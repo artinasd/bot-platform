@@ -90,7 +90,26 @@ VALUES
   ('ticket-fk-a', 'tenant-fk-a', 'customer-fk-a', 'Ticket A', CURRENT_TIMESTAMP),
   ('ticket-fk-b', 'tenant-fk-b', 'customer-fk-b', 'Ticket B', CURRENT_TIMESTAMP);
 
-DO $$
+DO $
+BEGIN
+  BEGIN
+    INSERT INTO "Customer" ("id", "tenantId", "userId", "updatedAt")
+    VALUES ('customer-fk-invalid-user', 'tenant-fk-a', 'user-fk-missing', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected customer user foreign key to reject an unknown user';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO "StaffMember" ("id", "tenantId", "userId", "role", "updatedAt")
+    VALUES ('staff-fk-invalid-user', 'tenant-fk-a', 'user-fk-missing', 'OWNER', CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Expected staff member user foreign key to reject an unknown user';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+END $;
+
+DO $
 BEGIN
   BEGIN
     INSERT INTO "VPNServer" ("id", "tenantId", "panelId", "name", "updatedAt")
