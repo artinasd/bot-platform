@@ -79,7 +79,7 @@ describe("provider-operation executor registry", () => {
 
   it.each(["", " ", " TEST", "TEST "])("rejects non-canonical provider type %j", (providerType) => {
     expect(() => createProviderOperationExecutorRegistry([
-      { providerType, action: "subscription.create", execute: vi.fn() }
+      { providerType, action: "subscription.create", validateRequestPayload: vi.fn(), execute: vi.fn() }
     ])).toThrow(/provider type must be a non-empty canonical string/);
   });
 
