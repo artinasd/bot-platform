@@ -192,8 +192,16 @@ describe("provider operation service", () => {
     await expect(service.markFailed("tenant-a", "operation-a", ProviderOperationStatus.UNKNOWN, "Timeout after request")).resolves.toBe(true);
     expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
       where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.RUNNING },
-      data: { status: ProviderOperationStatus.UNKNOWN, lastError: "Timeout after request" }
+      data: { status: ProviderOperationStatus.UNKNOWN, lastError: "Provider outcome is unknown; reconciliation is required." }
     });
+  });
+
+  it("does not persist raw provider error text passed directly to markFailed", async () => {
+    const service = makeService();
+    await service.markFailed("tenant-a", "operation-a", ProviderOperationStatus.UNKNOWN, "authorization=super-secret");
+    const update = mocks.operationUpdateMany.mock.calls[0][0];
+    expect(update.data.lastError).toBe("Provider outcome is unknown; reconciliation is required.");
+    expect(JSON.stringify(update)).not.toContain("super-secret");
   });
 
   it("moves only stale running operations for the tenant to UNKNOWN for reconciliation", async () => {
@@ -249,9 +257,20 @@ describe("provider operation service", () => {
       where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.UNKNOWN },
       data: {
         status: ProviderOperationStatus.RETRYABLE_FAILURE,
-        lastError: "Provider confirms request was not applied"
+        lastError: "Reconciliation confirmed the provider action was not applied; retry is permitted."
       }
     });
+  });
+
+  it("does not persist operator-supplied error text during unknown-operation reconciliation", async () => {
+    const service = makeService();
+    await service.resolveUnknown("tenant-a", "operation-a", {
+      status: ProviderOperationStatus.PERMANENT_FAILURE,
+      errorMessage: "Provider response authorization=super-secret"
+    });
+    const update = mocks.operationUpdateMany.mock.calls[0][0];
+    expect(update.data.lastError).toBe("Reconciliation confirmed the provider action failed permanently.");
+    expect(JSON.stringify(update)).not.toContain("super-secret");
   });
 
   it("does not resolve unknown operations belonging to another tenant or already transitioned", async () => {

@@ -210,6 +210,10 @@ export class ProviderOperationService {
       throw new Error("Invalid unknown-operation resolution status.");
     }
 
+    const safeResolutionError = resolution.status === ProviderOperationStatus.RETRYABLE_FAILURE
+      ? "Reconciliation confirmed the provider action was not applied; retry is permitted."
+      : "Reconciliation confirmed the provider action failed permanently.";
+
     const data: Prisma.ProviderOperationUpdateManyMutationInput =
       resolution.status === ProviderOperationStatus.SUCCEEDED
         ? {
@@ -219,7 +223,7 @@ export class ProviderOperationService {
           }
         : {
             status: resolution.status,
-            lastError: resolution.errorMessage.slice(0, 2000)
+            lastError: safeResolutionError
           };
 
     if (
@@ -260,9 +264,15 @@ export class ProviderOperationService {
       throw new Error("Invalid provider operation failure status.");
     }
 
+    const safeFailureMessage = status === ProviderOperationStatus.RETRYABLE_FAILURE
+      ? "Provider confirmed no action was applied; retry is safe."
+      : status === ProviderOperationStatus.PERMANENT_FAILURE
+        ? "Provider action failed permanently."
+        : "Provider outcome is unknown; reconciliation is required.";
+
     const result = await this.db.providerOperation.updateMany({
       where: { id: operationId, tenantId, status: ProviderOperationStatus.RUNNING },
-      data: { status, lastError: errorMessage.slice(0, 2000) }
+      data: { status, lastError: safeFailureMessage }
     });
     return result.count === 1;
   }
