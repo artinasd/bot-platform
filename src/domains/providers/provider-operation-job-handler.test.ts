@@ -129,7 +129,7 @@ describe("provider-operation job handler", () => {
     mocks.getById
       .mockResolvedValueOnce(operation)
       .mockResolvedValueOnce({ ...operation, status: ProviderOperationStatus.RUNNING });
-    await expect(makeHandler()(job)).rejects.toThrow(/already running/);
+    await expect(makeHandler()(job)).rejects.toThrow(/could not be claimed/);
     expect(mocks.execute).not.toHaveBeenCalled();
   });
 });
