@@ -36,9 +36,25 @@ function operationIdFromPayload(payload: Prisma.JsonValue): string {
   return operationId;
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) return error.message.slice(0, 2000);
-  return "Provider operation failed with an unclassified error.";
+function safeFailureMessage(status: ProviderOperationFailureStatus): string {
+  switch (status) {
+    case ProviderOperationStatus.RETRYABLE_FAILURE:
+      return "Provider confirmed no action was applied; retry is safe.";
+    case ProviderOperationStatus.PERMANENT_FAILURE:
+      return "Provider action failed permanently.";
+    case ProviderOperationStatus.UNKNOWN:
+      return "Provider outcome is unknown; reconciliation is required.";
+  }
+}
+
+function safeErrorCode(error: unknown): string {
+  if (
+    error instanceof ProviderOperationExecutionError &&
+    /^[A-Z0-9_]{1,80}$/.test(error.code)
+  ) {
+    return error.code;
+  }
+  return "PROVIDER_OPERATION_FAILED";
 }
 
 /**
@@ -108,18 +124,14 @@ export function createProviderOperationJobHandler(
       const status = error instanceof ProviderOperationExecutionError
         ? error.status
         : ProviderOperationStatus.UNKNOWN;
-      const message = errorMessage(error);
+      const message = safeFailureMessage(status);
       const recorded = await service.markFailed(tenantId, operationId, status, message);
       if (!recorded) {
         throw new Error("Provider operation failure could not be recorded; reconcile its outcome before retrying.");
       }
 
       if (status === ProviderOperationStatus.RETRYABLE_FAILURE) {
-        const retryable = error instanceof ProviderOperationExecutionError ? error : undefined;
-        throw new RetryableJobError(
-          retryable?.code ?? "PROVIDER_OPERATION_RETRYABLE",
-          message
-        );
+        throw new RetryableJobError(safeErrorCode(error), message);
       }
       throw new Error(
         status === ProviderOperationStatus.UNKNOWN

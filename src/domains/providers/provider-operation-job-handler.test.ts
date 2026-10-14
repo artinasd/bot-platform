@@ -107,13 +107,13 @@ describe("provider-operation job handler", () => {
   });
 
   it("records unclassified executor errors as UNKNOWN rather than retryable", async () => {
-    mocks.execute.mockRejectedValue(new Error("Connection dropped after request."));
+    mocks.execute.mockRejectedValue(new Error("Provider outcome is unknown; reconciliation is required."));
     await expect(makeHandler()(job)).rejects.toThrow(/requires reconciliation/);
     expect(mocks.markFailed).toHaveBeenCalledWith(
       "tenant-a",
       "operation-a",
       ProviderOperationStatus.UNKNOWN,
-      "Connection dropped after request."
+      "Provider outcome is unknown; reconciliation is required."
     );
   });
 
@@ -121,7 +121,7 @@ describe("provider-operation job handler", () => {
     mocks.execute.mockRejectedValue(new ProviderOperationExecutionError(
       ProviderOperationStatus.RETRYABLE_FAILURE,
       "PROVIDER_BUSY",
-      "Provider confirms no action was applied."
+      "Provider confirmed no action was applied; retry is safe."
     ));
     await expect(makeHandler()(job)).rejects.toMatchObject({
       name: "RetryableJobError",
@@ -131,7 +131,7 @@ describe("provider-operation job handler", () => {
       "tenant-a",
       "operation-a",
       ProviderOperationStatus.RETRYABLE_FAILURE,
-      "Provider confirms no action was applied."
+      "Provider confirmed no action was applied; retry is safe."
     );
   });
 
@@ -139,15 +139,44 @@ describe("provider-operation job handler", () => {
     mocks.execute.mockRejectedValue(new ProviderOperationExecutionError(
       ProviderOperationStatus.PERMANENT_FAILURE,
       "INVALID_PLAN",
-      "Provider rejected the plan."
+      "Provider action failed permanently."
     ));
-    await expect(makeHandler()(job)).rejects.toThrow("Provider rejected the plan.");
+    await expect(makeHandler()(job)).rejects.toThrow("Provider action failed permanently.");
     expect(mocks.markFailed).toHaveBeenCalledWith(
       "tenant-a",
       "operation-a",
       ProviderOperationStatus.PERMANENT_FAILURE,
-      "Provider rejected the plan."
+      "Provider action failed permanently."
     );
+  });
+
+
+  it("does not persist raw provider error details or unsafe error codes", async () => {
+    mocks.execute.mockRejectedValue(new ProviderOperationExecutionError(
+      ProviderOperationStatus.PERMANENT_FAILURE,
+      "INVALID_PLAN: token=super-secret",
+      "Rejected request with authorization: super-secret"
+    ));
+    await expect(makeHandler()(job)).rejects.toThrow("Provider action failed permanently.");
+    expect(mocks.markFailed).toHaveBeenCalledWith(
+      "tenant-a",
+      "operation-a",
+      ProviderOperationStatus.PERMANENT_FAILURE,
+      "Provider action failed permanently."
+    );
+  });
+
+  it("uses a safe fallback code for unclassified retryable error codes", async () => {
+    mocks.execute.mockRejectedValue(new ProviderOperationExecutionError(
+      ProviderOperationStatus.RETRYABLE_FAILURE,
+      "provider busy token=super-secret",
+      "Do not expose this detail"
+    ));
+    await expect(makeHandler()(job)).rejects.toMatchObject({
+      name: "RetryableJobError",
+      code: "PROVIDER_OPERATION_FAILED",
+      message: "Provider confirmed no action was applied; retry is safe."
+    });
   });
 
   it("requires a tenant and an operation ID before claiming work", async () => {
