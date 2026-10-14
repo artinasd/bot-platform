@@ -1,6 +1,13 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 
 const TENANT_SCOPED_MODELS = new Set([
+  "User",
+  "Job",
+  "Event",
+  "AuditLog",
+  "Permission",
+  "Role",
+  "FeatureFlag",
   "TenantSettings",
   "TenantBranding",
   "Domain",
@@ -123,10 +130,15 @@ export function createTenantClient(prisma: PrismaClient, tenantId: string) {
             }
 
             if (operation === "upsert") {
-              addTenantToData(mutableArgs, tenantId);
               if (mutableArgs.create && typeof mutableArgs.create === "object") {
                 mutableArgs.create = {
                   ...(mutableArgs.create as Record<string, unknown>),
+                  tenantId
+                };
+              }
+              if (mutableArgs.update && typeof mutableArgs.update === "object") {
+                mutableArgs.update = {
+                  ...(mutableArgs.update as Record<string, unknown>),
                   tenantId
                 };
               }
@@ -138,7 +150,8 @@ export function createTenantClient(prisma: PrismaClient, tenantId: string) {
                 throw new Error("Unique lookup requires a where clause.");
               }
 
-              mutableArgs.where = { AND: [where, { tenantId }] };
+              // Keep a unique selector at the top level for Prisma's extendedWhereUnique.
+              mutableArgs.where = { ...where, tenantId };
             }
 
             return query(mutableArgs as never);
