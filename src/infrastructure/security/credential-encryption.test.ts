@@ -25,7 +25,7 @@ describe("credential encryption", () => {
   it("rejects missing and malformed encryption keys", () => {
     delete process.env.CREDENTIAL_ENCRYPTION_KEY;
     expect(() => encryptCredential("secret")).toThrow(/not configured/);
-    expect(() => decryptCredential("v1.a.b.c")).toThrow(/not configured/);
+    expect(() => decryptCredential("v1.MDEyMzQ1Njc4OWFi.YWJjZGVmZ2hpamtsbW5vcA.YWJj")).toThrow(/not configured/);
 
     process.env.CREDENTIAL_ENCRYPTION_KEY = "not-a-key";
     expect(() => encryptCredential("secret")).toThrow(/32-byte key/);
