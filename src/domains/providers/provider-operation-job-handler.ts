@@ -51,7 +51,7 @@ function operationIdFromPayload(payload: Prisma.JsonValue): string {
     !operationId.trim() ||
     operationId !== operationId.trim() ||
     operationId.length > 200 ||
-    /[\\u0000-\\u001f\\u007f]/.test(operationId)
+    /[\u0000-\u001f\u007f]/.test(operationId)
   ) {
     throw new Error("Provider-operation job payload requires a valid operationId.");
   }

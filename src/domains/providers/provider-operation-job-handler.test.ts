@@ -202,6 +202,8 @@ describe("provider-operation job handler", () => {
     await expect(makeHandler()({ ...job, payload: { operationId: " operation-a " } } as Job)).rejects.toThrow(/valid operationId/);
     await expect(makeHandler()({ ...job, payload: { operationId: "operation-a", tenantId: "tenant-b" } } as Job)).rejects.toThrow(/only operationId/);
     await expect(makeHandler()({ ...job, payload: { operationId: "operation-a".repeat(30) } } as Job)).rejects.toThrow(/valid operationId/);
+    await expect(makeHandler()({ ...job, payload: { operationId: "operation-a\u0000tail" } } as Job)).rejects.toThrow(/valid operationId/);
+    await expect(makeHandler()({ ...job, payload: { operationId: "operation-a\u007ftail" } } as Job)).rejects.toThrow(/valid operationId/);
     expect(mocks.claim).not.toHaveBeenCalled();
   });
 
