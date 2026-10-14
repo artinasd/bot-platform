@@ -22,7 +22,7 @@ describe("provider operation response payload validator", () => {
 
   it("rejects padded values and control characters", () => {
     expect(() => validateProviderOperationResponsePayload({ providerRef: " ref " })).toThrow(/invalid field value/);
-    expect(() => validateProviderOperationResponsePayload({ requestId: "id\\nheader" })).toThrow(/invalid field value/);
+    expect(() => validateProviderOperationResponsePayload({ requestId: "id\nheader" })).toThrow(/invalid field value/);
   });
 
   it("rejects unsupported fields and values beyond the field limit", () => {

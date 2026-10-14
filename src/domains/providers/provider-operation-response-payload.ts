@@ -29,7 +29,7 @@ export function validateProviderOperationResponsePayload(value: unknown): Prisma
       !fieldValue.trim() ||
       fieldValue.length > MAX_FIELD_LENGTH ||
       fieldValue.trim() !== fieldValue ||
-      /[\\u0000-\\u001f\\u007f]/.test(fieldValue)
+      /[\u0000-\u001f\u007f]/.test(fieldValue)
     ) {
       throw new Error("Provider response payload contains an invalid field value.");
     }
