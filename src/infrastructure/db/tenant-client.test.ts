@@ -116,4 +116,69 @@ describe("tenant-scoped Prisma client", () => {
 
     expect(args.where).toEqual({ id: "product-1", tenantId: "tenant-a" });
   });
+
+  it("adds tenant scope to updateMany and deleteMany filters", async () => {
+    const handler = createHarness();
+
+    for (const operation of ["updateMany", "deleteMany"]) {
+      const args: QueryArgs = { where: { status: "ACTIVE" } };
+      await handler({
+        model: "Product",
+        operation,
+        args,
+        query: async (received) => received
+      });
+      expect(args.where).toEqual({
+        AND: [{ status: "ACTIVE" }, { tenantId: "tenant-a" }]
+      });
+    }
+  });
+
+  it("overrides a supplied tenant ID in unique mutations", async () => {
+    const handler = createHarness();
+    const args: QueryArgs = { where: { id: "product-1", tenantId: "tenant-b" } };
+
+    await handler({
+      model: "Product",
+      operation: "update",
+      args,
+      query: async (received) => received
+    });
+
+    expect(args.where).toEqual({ id: "product-1", tenantId: "tenant-a" });
+  });
+
+  it("forces tenant IDs on both branches of upsert", async () => {
+    const handler = createHarness();
+    const args: QueryArgs = {
+      where: { id: "product-1" },
+      create: { tenantId: "tenant-b", name: "created" },
+      update: { tenantId: "tenant-b", name: "updated" }
+    };
+
+    await handler({
+      model: "Product",
+      operation: "upsert",
+      args,
+      query: async (received) => received
+    });
+
+    expect(args.where).toEqual({ id: "product-1", tenantId: "tenant-a" });
+    expect(args.create).toEqual({ tenantId: "tenant-a", name: "created" });
+    expect(args.update).toEqual({ tenantId: "tenant-a", name: "updated" });
+  });
+
+  it("rejects missing unique selectors before running a mutation", async () => {
+    const handler = createHarness();
+    const query = vi.fn(async () => "should not run");
+
+    await expect(handler({
+      model: "Product",
+      operation: "delete",
+      args: {},
+      query
+    })).rejects.toThrow(/where clause/i);
+    expect(query).not.toHaveBeenCalled();
+  });
+
 });
