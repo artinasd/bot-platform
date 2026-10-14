@@ -65,10 +65,10 @@ describe("session tenant membership validation", () => {
       select: { id: true }
     });
     expect(db.session.updateMany).toHaveBeenCalledTimes(1);
-    const update = db.session.updateMany.mock.calls[0][0];
-    expect(update.where).toEqual({ id: "session-1", revokedAt: null });
-    expect(update.data.revokedAt).toBeInstanceOf(Date);
-    expect(update.data).not.toHaveProperty("lastSeenAt");
+    expect(db.session.updateMany).toHaveBeenCalledWith({
+      where: { id: "session-1", revokedAt: null },
+      data: { revokedAt: expect.any(Date) }
+    });
   });
 
   it("keeps the session valid when active staff membership remains", async () => {
@@ -78,13 +78,13 @@ describe("session tenant membership validation", () => {
 
     expect(result).toEqual(sessionRecord);
     expect(db.session.updateMany).toHaveBeenCalledTimes(1);
-    const update = db.session.updateMany.mock.calls[0][0];
-    expect(update.where).toEqual({
-      id: "session-1",
-      revokedAt: null,
-      expiresAt: { gt: expect.any(Date) }
+    expect(db.session.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "session-1",
+        revokedAt: null,
+        expiresAt: { gt: expect.any(Date) }
+      },
+      data: { lastSeenAt: expect.any(Date) }
     });
-    expect(update.data.lastSeenAt).toBeInstanceOf(Date);
-    expect(update.data).not.toHaveProperty("revokedAt");
   });
 });
