@@ -40,4 +40,20 @@ describe("authorization service", () => {
   it("checks tenant ownership before capabilities", () => {
     expect(() => authorizeTenantAction(actor, { tenantId: "tenant_b", tenantStatus: TenantStatus.ACTIVE }, "support:manage")).toThrow(TenantContextError);
   });
+  it("fails closed for unknown runtime capabilities and malformed roles", () => {
+    expect(hasCapability(actor, "root:everything" as never)).toBe(false);
+    expect(hasCapability({ ...actor, role: "UNKNOWN" as never }, "support:manage")).toBe(false);
+  });
+
+  it("does not treat unknown explicit permission strings as capabilities", () => {
+    expect(hasCapability({
+      ...actor,
+      explicitPermissions: ["root:everything", "tenant:read"]
+    }, "support:manage")).toBe(false);
+    expect(hasCapability({
+      ...actor,
+      explicitPermissions: ["root:everything", "tenant:read"]
+    }, "tenant:read")).toBe(true);
+  });
+
 });
