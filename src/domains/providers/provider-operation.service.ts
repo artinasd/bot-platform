@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient, ProviderOperationStatus, RecordStatus } from "@prisma/client";
+import { validateProviderOperationResponsePayload } from "./provider-operation-response-payload";
 
 export type CreateProviderOperationInput = {
   tenantId: string;
@@ -158,12 +159,13 @@ export class ProviderOperationService {
   ) {
     validateRequired(tenantId, "Tenant ID");
     validateRequired(operationId, "Provider operation ID");
+    const safeResponsePayload = validateProviderOperationResponsePayload(responsePayload);
 
     const result = await this.db.providerOperation.updateMany({
       where: { id: operationId, tenantId, status: ProviderOperationStatus.RUNNING },
       data: {
         status: ProviderOperationStatus.SUCCEEDED,
-        responsePayload,
+        responsePayload: safeResponsePayload,
         lastError: null
       }
     });
@@ -210,6 +212,10 @@ export class ProviderOperationService {
       throw new Error("Invalid unknown-operation resolution status.");
     }
 
+    const safeResponsePayload = resolution.status === ProviderOperationStatus.SUCCEEDED
+      ? validateProviderOperationResponsePayload(resolution.responsePayload ?? {})
+      : undefined;
+
     const safeResolutionError = resolution.status === ProviderOperationStatus.RETRYABLE_FAILURE
       ? "Reconciliation confirmed the provider action was not applied; retry is permitted."
       : "Reconciliation confirmed the provider action failed permanently.";
@@ -218,7 +224,7 @@ export class ProviderOperationService {
       resolution.status === ProviderOperationStatus.SUCCEEDED
         ? {
             status: ProviderOperationStatus.SUCCEEDED,
-            responsePayload: resolution.responsePayload ?? {},
+            responsePayload: safeResponsePayload ?? {},
             lastError: null
           }
         : {

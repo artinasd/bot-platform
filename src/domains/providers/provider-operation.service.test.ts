@@ -174,6 +174,24 @@ describe("provider operation service", () => {
     expect(mocks.operationFindFirst).not.toHaveBeenCalled();
   });
 
+  it("rejects unapproved provider response fields before persistence", async () => {
+    const service = makeService();
+    await expect(service.markSucceeded("tenant-a", "operation-a", {
+      providerRef: "ref-1",
+      authorization: "super-secret"
+    } as never)).rejects.toThrow(/unsupported field/);
+    expect(mocks.operationUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects nested, non-string, and oversized provider response values", async () => {
+    const service = makeService();
+    await expect(service.markSucceeded("tenant-a", "operation-a", { providerRef: { token: "secret" } } as never))
+      .rejects.toThrow(/invalid field value/);
+    await expect(service.markSucceeded("tenant-a", "operation-a", { providerRef: "x".repeat(257) }))
+      .rejects.toThrow(/invalid field value/);
+    expect(mocks.operationUpdateMany).not.toHaveBeenCalled();
+  });
+
   it("marks success only for a running operation in the requested tenant", async () => {
     const service = makeService();
     await expect(service.markSucceeded("tenant-a", "operation-a", { providerRef: "ref-1" })).resolves.toBe(true);
@@ -245,6 +263,15 @@ describe("provider operation service", () => {
         lastError: null
       }
     });
+  });
+
+  it("applies the same response validation to reconciled success", async () => {
+    const service = makeService();
+    await expect(service.resolveUnknown("tenant-a", "operation-a", {
+      status: ProviderOperationStatus.SUCCEEDED,
+      responsePayload: { rawResponse: "authorization=super-secret" }
+    } as never)).rejects.toThrow(/unsupported field/);
+    expect(mocks.operationUpdateMany).not.toHaveBeenCalled();
   });
 
   it("can return an unknown operation to retryable only after reconciliation confirms no side effect", async () => {
