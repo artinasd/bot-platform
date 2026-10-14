@@ -55,6 +55,20 @@ jobs:
       - name: Apply schema to clean PostgreSQL
         run: npx prisma db push --skip-generate
 
+      - name: Generate initial migration baseline for review
+        run: |
+          mkdir -p /tmp/prisma-baseline/prisma/migrations/20261014000000_baseline
+          npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > /tmp/prisma-baseline/prisma/migrations/20261014000000_baseline/migration.sql
+          printf 'provider = "postgresql"\n' > /tmp/prisma-baseline/prisma/migrations/migration_lock.toml
+
+      - name: Upload generated migration baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: prisma-migration-baseline-preview
+          path: /tmp/prisma-baseline/prisma/migrations/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Typecheck
         run: npm run typecheck
 
