@@ -68,13 +68,8 @@ const READ_OPERATIONS = new Set([
   "groupBy"
 ]);
 
-const WRITE_WHERE_OPERATIONS = new Set([
-  "update",
-  "updateMany",
-  "delete",
-  "deleteMany",
-  "upsert"
-]);
+const UNIQUE_WRITE_OPERATIONS = new Set(["update", "delete", "upsert"]);
+const FILTERED_WRITE_OPERATIONS = new Set(["updateMany", "deleteMany"]);
 
 function addTenantToWhere(args: Record<string, unknown>, tenantId: string) {
   const existing = (args.where ?? {}) as Record<string, unknown>;
@@ -106,8 +101,15 @@ export function createTenantClient(prisma: PrismaClient, tenantId: string) {
 
             const mutableArgs = args as Record<string, unknown>;
 
-            if (READ_OPERATIONS.has(operation) || WRITE_WHERE_OPERATIONS.has(operation)) {
+            if (READ_OPERATIONS.has(operation) || FILTERED_WRITE_OPERATIONS.has(operation)) {
               addTenantToWhere(mutableArgs, tenantId);
+            }
+
+            if (UNIQUE_READ_OPERATIONS.has(operation) || UNIQUE_WRITE_OPERATIONS.has(operation)) {
+              const where = mutableArgs.where as Record<string, unknown> | undefined;
+              if (!where) throw new Error("Unique lookup or mutation requires a where clause.");
+              // Prisma requires a unique selector at the top level for unique operations.
+              mutableArgs.where = { ...where, tenantId };
             }
 
             if (operation === "create") {
@@ -142,16 +144,6 @@ export function createTenantClient(prisma: PrismaClient, tenantId: string) {
                   tenantId
                 };
               }
-            }
-
-            if (UNIQUE_READ_OPERATIONS.has(operation)) {
-              const where = mutableArgs.where as Record<string, unknown> | undefined;
-              if (!where) {
-                throw new Error("Unique lookup requires a where clause.");
-              }
-
-              // Keep a unique selector at the top level for Prisma's extendedWhereUnique.
-              mutableArgs.where = { ...where, tenantId };
             }
 
             return query(mutableArgs as never);
