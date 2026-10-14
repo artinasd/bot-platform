@@ -67,6 +67,19 @@ describe("ProviderOperationRetryService", () => {
     expect(mocks.updateOperation).not.toHaveBeenCalled();
     expect(mocks.createJob).not.toHaveBeenCalled();
   });
+  it("requires reconciliation when the prior retry generation is terminal", async () => {
+    const terminalJob = { id: "job-retry-a", status: JobStatus.FAILED };
+    mocks.findOperation.mockResolvedValue({ ...operation, status: ProviderOperationStatus.PENDING });
+    mocks.findRetryGeneration.mockResolvedValue(terminalJob);
+
+    await expect(
+      makeService().requeue({ tenantId: "tenant-a", operationId: "operation-a" })
+    ).rejects.toThrow(/terminal or inconsistent; reconcile/);
+
+    expect(mocks.updateOperation).not.toHaveBeenCalled();
+    expect(mocks.createJob).not.toHaveBeenCalled();
+  });
+
   it("refuses unknown outcomes and does not create a job", async () => {
     mocks.findOperation.mockResolvedValue({ ...operation, status: ProviderOperationStatus.UNKNOWN });
     await expect(makeService().requeue({ tenantId: "tenant-a", operationId: "operation-a" })).rejects.toThrow(/Only explicitly retryable/);
