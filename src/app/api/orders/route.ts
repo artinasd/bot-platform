@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { OrderService } from "@/domains/commerce/order.service";
 import { AuthenticationService } from "@/domains/identity/authentication.service";
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
       idempotencyKey,
       items: parsed.data.items.map((item) => ({
         ...item,
-        configuration: item.configuration as Record<string, unknown> | undefined
+        configuration: item.configuration as Prisma.InputJsonValue | undefined
       }))
     });
 
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
           totalMinor: order.totalMinor.toString(),
           currency: order.currency,
           createdAt: order.createdAt.toISOString(),
-          items: "items" in order ? order.items.map((item) => ({
+          items: order.items.map((item) => ({
             id: item.id,
             productId: item.productId,
             planId: item.planId,
@@ -78,13 +79,22 @@ export async function POST(request: NextRequest) {
             unitPriceMinor: item.unitPriceMinor.toString(),
             totalPriceMinor: item.totalPriceMinor.toString(),
             configuration: item.configuration
-          })) : []
+          }))
         }
       }
     }, { status: result.duplicate ? 200 : 201 });
     response.headers.set("Cache-Control", "no-store");
     return response;
-  } catch {
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      const status = error.code === "P2002" ? 409 : 500;
+      return NextResponse.json({
+        error: {
+          code: error.code === "P2002" ? "ORDER_CONFLICT" : "DATABASE_ERROR",
+          message: error.code === "P2002" ? "An order with this idempotency key already exists." : "Unable to create the order."
+        }
+      }, { status });
+    }
     return NextResponse.json({ error: { code: "ORDER_REJECTED", message: "The order could not be created with the supplied items." } }, { status: 400 });
   }
 }
