@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cache } from "./redis";
 
 describe("cache local fallback", () => {
@@ -44,6 +44,22 @@ describe("cache local fallback", () => {
   it("increments counters", async () => {
     expect(await cache.increment("test:cache:counter", 60)).toBe(1);
     expect(await cache.increment("test:cache:counter", 60)).toBe(2);
+  });
+
+  it("does not extend a counter TTL when incrementing an existing key", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      expect(await cache.increment("test:cache:ttl-counter", 10)).toBe(1);
+
+      vi.setSystemTime(new Date("2026-01-01T00:00:05.000Z"));
+      expect(await cache.increment("test:cache:ttl-counter", 10)).toBe(2);
+
+      vi.setSystemTime(new Date("2026-01-01T00:00:10.001Z"));
+      await expect(cache.get("test:cache:ttl-counter")).resolves.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("deletes keys by prefix", async () => {
