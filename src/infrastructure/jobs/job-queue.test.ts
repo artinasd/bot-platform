@@ -199,14 +199,19 @@ describe("durable job queue", () => {
     expect(mocks.jobFindUnique).not.toHaveBeenCalled();
   });
 
-  it("renews a running job lease only for its current worker", async () => {
+  it("renews a running job lease only for its current worker while the lease is live", async () => {
     const queue = makeQueue();
     const now = new Date("2026-10-14T10:03:00.000Z");
 
     await queue.renewLease("job-a", "worker-a", now);
 
     expect(mocks.jobUpdateMany).toHaveBeenCalledWith({
-      where: { id: "job-a", status: JobStatus.RUNNING, lockedBy: "worker-a" },
+      where: {
+        id: "job-a",
+        status: JobStatus.RUNNING,
+        lockedBy: "worker-a",
+        lockedAt: { gte: new Date("2026-10-14T09:58:00.000Z") }
+      },
       data: { lockedAt: now }
     });
   });
@@ -214,11 +219,34 @@ describe("durable job queue", () => {
   it("does not renew a lease for a worker that no longer owns the job", async () => {
     mocks.jobUpdateMany.mockResolvedValue({ count: 0 });
     const queue = makeQueue();
+    const now = new Date("2026-10-14T10:03:00.000Z");
 
-    await expect(queue.renewLease("job-a", "worker-old")).resolves.toEqual({ count: 0 });
+    await expect(queue.renewLease("job-a", "worker-old", now)).resolves.toEqual({ count: 0 });
     expect(mocks.jobUpdateMany).toHaveBeenCalledWith({
-      where: { id: "job-a", status: JobStatus.RUNNING, lockedBy: "worker-old" },
-      data: { lockedAt: expect.any(Date) }
+      where: {
+        id: "job-a",
+        status: JobStatus.RUNNING,
+        lockedBy: "worker-old",
+        lockedAt: { gte: new Date("2026-10-14T09:58:00.000Z") }
+      },
+      data: { lockedAt: now }
+    });
+  });
+
+  it("refuses to resurrect an expired lease even if the old worker is still recorded as owner", async () => {
+    mocks.jobUpdateMany.mockResolvedValue({ count: 0 });
+    const queue = makeQueue();
+    const now = new Date("2026-10-14T10:10:00.000Z");
+
+    await expect(queue.renewLease("job-a", "worker-a", now)).resolves.toEqual({ count: 0 });
+    expect(mocks.jobUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: "job-a",
+        status: JobStatus.RUNNING,
+        lockedBy: "worker-a",
+        lockedAt: { gte: new Date("2026-10-14T10:05:00.000Z") }
+      },
+      data: { lockedAt: now }
     });
   });
 

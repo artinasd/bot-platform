@@ -120,10 +120,16 @@ export class JobQueue {
     if (!jobId.trim()) throw new Error("Job ID is required.");
     if (!workerId.trim()) throw new Error("Worker ID is required.");
 
-    // Only the current owner may extend a live lease; a stale worker must not
-    // resurrect a job after another worker has recovered or claimed it.
+    // A worker may renew only an unexpired lease. This prevents a delayed
+    // worker from reviving its lease after the recovery cutoff has passed.
+    const leaseCutoff = new Date(now.getTime() - 5 * 60 * 1000);
     return this.db.job.updateMany({
-      where: { id: jobId, status: JobStatus.RUNNING, lockedBy: workerId },
+      where: {
+        id: jobId,
+        status: JobStatus.RUNNING,
+        lockedBy: workerId,
+        lockedAt: { gte: leaseCutoff }
+      },
       data: { lockedAt: now }
     });
   }
