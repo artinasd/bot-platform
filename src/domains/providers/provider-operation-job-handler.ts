@@ -87,8 +87,17 @@ function safeErrorCode(error: unknown): string {
 export function createProviderOperationJobHandler(
   service: ProviderOperationService,
   credentialsService: ProviderConnectionCredentialsService,
-  execute: ProviderOperationExecutor
+  execute: ProviderOperationExecutor,
+  heartbeatIntervalMs = 60_000
 ): (job: Job) => Promise<void> {
+  if (
+    !Number.isSafeInteger(heartbeatIntervalMs) ||
+    heartbeatIntervalMs <= 0 ||
+    heartbeatIntervalMs >= 5 * 60_000
+  ) {
+    throw new Error("Provider-operation heartbeat interval must be a positive integer shorter than five minutes.");
+  }
+
   return async (job: Job) => {
     if (!job.tenantId?.trim()) {
       throw new Error("Provider-operation job must belong to a tenant.");
@@ -116,6 +125,25 @@ export function createProviderOperationJobHandler(
       throw new Error("Provider operation could not be claimed; it may already be running or terminal.");
     }
 
+    let operationLeaseLost = false;
+    let heartbeatStopped = false;
+    let heartbeatInFlight: Promise<void> = Promise.resolve();
+    const heartbeat = setInterval(() => {
+      heartbeatInFlight = heartbeatInFlight.then(async () => {
+        if (heartbeatStopped || operationLeaseLost) return;
+        try {
+          if (!await service.renewRunning(tenantId, operationId)) operationLeaseLost = true;
+        } catch {
+          // Retry transient database errors on the next tick; stale recovery remains the safeguard.
+        }
+      });
+    }, heartbeatIntervalMs);
+    const stopHeartbeat = async () => {
+      heartbeatStopped = true;
+      clearInterval(heartbeat);
+      await heartbeatInFlight;
+    };
+
     let credentials: ActiveProviderCredentials;
     try {
       if (!operation.providerConnectionId?.trim()) {
@@ -129,6 +157,7 @@ export function createProviderOperationJobHandler(
         throw new Error("Resolved provider credentials do not match the operation connection.");
       }
     } catch {
+      await stopHeartbeat();
       const message = "Active provider connection could not be resolved; no provider request was sent.";
       const recorded = await service.markFailed(
         tenantId,
@@ -142,10 +171,19 @@ export function createProviderOperationJobHandler(
       throw new Error("Provider connection is unavailable; provider action was not executed.");
     }
 
+    if (operationLeaseLost) {
+      await stopHeartbeat();
+      throw new Error("Provider operation ownership was lost before execution; reconcile before retrying.");
+    }
+
     let responsePayload: Prisma.InputJsonValue;
     try {
       responsePayload = await execute(operation, credentials);
     } catch (error) {
+      await stopHeartbeat();
+      if (operationLeaseLost) {
+        throw new Error("Provider operation ownership was lost during execution; reconcile before retrying.");
+      }
       const status = error instanceof ProviderOperationExecutionError
         ? error.status
         : ProviderOperationStatus.UNKNOWN;
@@ -163,6 +201,11 @@ export function createProviderOperationJobHandler(
           ? "Provider operation outcome is unknown and requires reconciliation."
           : message
       );
+    }
+
+    await stopHeartbeat();
+    if (operationLeaseLost) {
+      throw new Error("Provider action may have completed after operation ownership was lost; reconcile before retrying.");
     }
 
     const recorded = await service.markSucceeded(tenantId, operationId, responsePayload);

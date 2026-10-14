@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   claim: vi.fn(),
   markSucceeded: vi.fn(),
   markFailed: vi.fn(),
+  renewRunning: vi.fn(),
   execute: vi.fn(),
   getActiveCredentials: vi.fn()
 }));
@@ -28,17 +29,18 @@ const job = {
   payload: { operationId: "operation-a" }
 } as unknown as Job;
 
-function makeHandler() {
+function makeHandler(heartbeatIntervalMs = 60_000) {
   const service = {
     getById: mocks.getById,
     claim: mocks.claim,
     markSucceeded: mocks.markSucceeded,
-    markFailed: mocks.markFailed
+    markFailed: mocks.markFailed,
+    renewRunning: mocks.renewRunning
   } as unknown as ProviderOperationService;
   const credentialsService = {
     getActiveCredentials: mocks.getActiveCredentials
   } as unknown as import("./provider-connection-credentials.service").ProviderConnectionCredentialsService;
-  return createProviderOperationJobHandler(service, credentialsService, mocks.execute);
+  return createProviderOperationJobHandler(service, credentialsService, mocks.execute, heartbeatIntervalMs);
 }
 
 describe("provider-operation job handler", () => {
@@ -48,6 +50,7 @@ describe("provider-operation job handler", () => {
     mocks.claim.mockResolvedValue({ ...operation, status: ProviderOperationStatus.RUNNING });
     mocks.markSucceeded.mockResolvedValue(true);
     mocks.markFailed.mockResolvedValue(true);
+    mocks.renewRunning.mockResolvedValue(true);
     mocks.execute.mockResolvedValue({ providerRef: "ref-a" });
     mocks.getActiveCredentials.mockResolvedValue({
       connectionId: "connection-a",
@@ -205,6 +208,24 @@ describe("provider-operation job handler", () => {
     await expect(makeHandler()({ ...job, payload: { operationId: "operation-a\u0000tail" } } as Job)).rejects.toThrow(/valid operationId/);
     await expect(makeHandler()({ ...job, payload: { operationId: "operation-a\u007ftail" } } as Job)).rejects.toThrow(/valid operationId/);
     expect(mocks.claim).not.toHaveBeenCalled();
+  });
+
+  it("renews the provider-operation recovery timestamp during a long-running execution", async () => {
+    mocks.execute.mockImplementation(async () => new Promise((resolve) => setTimeout(() => resolve({ providerRef: "ref-a" }), 25)));
+    await expect(makeHandler(5)(job)).resolves.toBeUndefined();
+    expect(mocks.renewRunning).toHaveBeenCalledWith("tenant-a", "operation-a");
+  });
+
+  it("does not record success after the provider-operation lease is lost", async () => {
+    mocks.renewRunning.mockResolvedValue(false);
+    mocks.execute.mockImplementation(async () => new Promise((resolve) => setTimeout(() => resolve({ providerRef: "ref-a" }), 25)));
+    await expect(makeHandler(5)(job)).rejects.toThrow(/ownership was lost during execution/);
+    expect(mocks.markSucceeded).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid provider-operation heartbeat interval", () => {
+    expect(() => makeHandler(0)).toThrow(/heartbeat interval must be a positive integer/);
+    expect(() => makeHandler(300_000)).toThrow(/heartbeat interval must be a positive integer/);
   });
 
   it("does not mark a provider action successful when persistence rejects the transition", async () => {

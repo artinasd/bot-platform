@@ -241,6 +241,31 @@ describe("provider operation service", () => {
     expect(JSON.stringify(update)).not.toContain("super-secret");
   });
 
+  it("renews only a running provider operation and refreshes its recovery timestamp", async () => {
+    const service = makeService();
+    const now = new Date("2026-10-15T10:00:00.000Z");
+
+    await expect(service.renewRunning("tenant-a", "operation-a", now)).resolves.toBe(true);
+    expect(mocks.operationUpdateMany).toHaveBeenCalledWith({
+      where: { id: "operation-a", tenantId: "tenant-a", status: ProviderOperationStatus.RUNNING },
+      data: { updatedAt: now }
+    });
+  });
+
+  it("validates provider-operation heartbeat identifiers and timestamp", async () => {
+    const service = makeService();
+    await expect(service.renewRunning(" ", "operation-a")).rejects.toThrow(/Tenant ID is required/);
+    await expect(service.renewRunning("tenant-a", " ")).rejects.toThrow(/Provider operation ID is required/);
+    await expect(service.renewRunning("tenant-a", "operation-a", new Date("invalid"))).rejects.toThrow(/valid provider-operation heartbeat date/);
+    expect(mocks.operationUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not renew an operation that is no longer running", async () => {
+    mocks.operationUpdateMany.mockResolvedValue({ count: 0 });
+    const service = makeService();
+    await expect(service.renewRunning("tenant-a", "operation-a")).resolves.toBe(false);
+  });
+
   it("moves only stale running operations for the tenant to UNKNOWN for reconciliation", async () => {
     const service = makeService();
     const staleBefore = new Date("2026-10-14T10:00:00.000Z");

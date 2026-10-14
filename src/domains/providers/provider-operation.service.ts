@@ -175,6 +175,20 @@ export class ProviderOperationService {
     return result.count === 1;
   }
 
+  async renewRunning(tenantId: string, operationId: string, now = new Date()) {
+    validateRequired(tenantId, "Tenant ID");
+    validateRequired(operationId, "Provider operation ID");
+    if (!(now instanceof Date) || Number.isNaN(now.getTime())) {
+      throw new Error("A valid provider-operation heartbeat date is required.");
+    }
+
+    const result = await this.db.providerOperation.updateMany({
+      where: { id: operationId, tenantId, status: ProviderOperationStatus.RUNNING },
+      data: { updatedAt: now }
+    });
+    return result.count === 1;
+  }
+
   async markExpiredRunningUnknown(tenantId: string, staleBefore: Date) {
     validateRequired(tenantId, "Tenant ID");
     if (!(staleBefore instanceof Date) || Number.isNaN(staleBefore.getTime())) {
