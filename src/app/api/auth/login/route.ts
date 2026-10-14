@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const rateKey = createHash("sha256")
     .update(`${ip.toLowerCase()}:${parsed.data.tenantSlug}:${parsed.data.email.toLowerCase()}`)
     .digest("hex");
-  const attempts = await cache.increment(`auth:login:${rateKey}`, WINDOW_SECONDS).catch(() => 1);
+  const attempts = await cache.increment(`auth:login:${rateKey}`, WINDOW_SECONDS).catch(() => process.env.NODE_ENV === "production" ? MAX_ATTEMPTS + 1 : 1);
   if (attempts > MAX_ATTEMPTS) {
     return NextResponse.json(
       { error: { code: "RATE_LIMITED", message: "Too many login attempts. Try again later." } },
