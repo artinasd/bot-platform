@@ -72,6 +72,18 @@ describe("durable job queue", () => {
     const queue = makeQueue();
     const runAt = new Date("2026-10-14T10:00:00.000Z");
 
+    mocks.jobUpsert.mockResolvedValue({
+      id: "job-a",
+      tenantId: "tenant-a",
+      type: "provider.provision",
+      payload: { orderId: "order-a" },
+      idempotencyKey: "job-key-a",
+      correlationId: "correlation-a",
+      runAt,
+      maxAttempts: 8,
+      status: JobStatus.QUEUED
+    });
+
     await queue.enqueue({ ...enqueueInput, runAt });
 
     expect(mocks.jobUpsert).toHaveBeenCalledWith({
@@ -88,6 +100,44 @@ describe("durable job queue", () => {
       },
       update: {}
     });
+  });
+
+  it("rejects reusing an idempotency key for a different job payload", async () => {
+    mocks.jobUpsert.mockResolvedValue({
+      id: "job-a",
+      tenantId: "tenant-a",
+      type: "provider.provision",
+      payload: { orderId: "order-a" },
+      idempotencyKey: "job-key-a",
+      correlationId: "correlation-a",
+      runAt: new Date("2026-10-14T10:00:00.000Z"),
+      maxAttempts: 8,
+      status: JobStatus.QUEUED
+    });
+    const queue = makeQueue();
+
+    await expect(queue.enqueue({ ...enqueueInput, payload: { orderId: "order-b" } }))
+      .rejects.toThrow("Job idempotency key is already associated with a different job.");
+  });
+
+  it("accepts the same job payload regardless of object key order", async () => {
+    mocks.jobUpsert.mockResolvedValue({
+      id: "job-a",
+      tenantId: "tenant-a",
+      type: "provider.provision",
+      payload: { nested: { b: 2, a: 1 }, orderId: "order-a" },
+      idempotencyKey: "job-key-a",
+      correlationId: "correlation-a",
+      runAt: new Date("2026-10-14T10:00:00.000Z"),
+      maxAttempts: 8,
+      status: JobStatus.QUEUED
+    });
+    const queue = makeQueue();
+
+    await expect(queue.enqueue({
+      ...enqueueInput,
+      payload: { orderId: "order-a", nested: { a: 1, b: 2 } }
+    })).resolves.toMatchObject({ id: "job-a" });
   });
 
   it("rejects an empty worker ID before opening a claim transaction", async () => {

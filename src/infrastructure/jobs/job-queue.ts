@@ -10,6 +10,15 @@ export type EnqueueJobInput = {
   maxAttempts?: number;
 };
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
 export class JobQueue {
   constructor(private readonly db: PrismaClient) {}
 
@@ -21,7 +30,7 @@ export class JobQueue {
       throw new Error("Job max attempts must be a positive integer.");
     }
 
-    return this.db.job.upsert({
+    const job = await this.db.job.upsert({
       where: { idempotencyKey: input.idempotencyKey },
       create: {
         tenantId: input.tenantId ?? null,
@@ -35,6 +44,22 @@ export class JobQueue {
       },
       update: {}
     });
+
+    // An idempotency-key collision must not silently alias a different task.
+    // Omitted runAt is intentionally not compared: retries naturally happen later.
+    const sameRequest =
+      job.tenantId === (input.tenantId ?? null) &&
+      job.type === input.type &&
+      stableJson(job.payload) === stableJson(input.payload) &&
+      job.correlationId === input.correlationId &&
+      job.maxAttempts === (input.maxAttempts ?? 8) &&
+      (input.runAt === undefined || job.runAt.getTime() === input.runAt.getTime());
+
+    if (!sameRequest) {
+      throw new Error("Job idempotency key is already associated with a different job.");
+    }
+
+    return job;
   }
 
   async claimNext(workerId: string, now = new Date()) {
