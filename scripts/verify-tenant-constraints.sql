@@ -157,8 +157,8 @@ BEGIN
   END;
 
   BEGIN
-    INSERT INTO "SubscriptionConfiguration" ("id", "tenantId", "subscriptionId", "label")
-    VALUES ('config-fk-invalid-subscription', 'tenant-fk-b', 'subscription-fk-a', 'Invalid tenant config');
+    INSERT INTO "SubscriptionConfiguration" ("id", "tenantId", "subscriptionId", "label", "updatedAt")
+    VALUES ('config-fk-invalid-subscription', 'tenant-fk-b', 'subscription-fk-a', 'Invalid tenant config', CURRENT_TIMESTAMP);
     RAISE EXCEPTION 'Expected the database to reject a subscription configuration referencing another tenant subscription';
   EXCEPTION WHEN foreign_key_violation THEN
     NULL;
