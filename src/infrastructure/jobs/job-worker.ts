@@ -21,23 +21,27 @@ export class RetryableJobError extends Error {
   }
 }
 
+function safeErrorCode(code: string, fallback: string): string {
+  return /^[A-Z0-9_]{1,80}$/.test(code) ? code : fallback;
+}
+
 function errorDetails(error: unknown): { code: string; message: string; retryable: boolean } {
   if (error instanceof RetryableJobError) {
     return {
-      code: error.code,
-      message: error.message || "Retryable job failure.",
+      code: safeErrorCode(error.code, "RETRYABLE_JOB_ERROR"),
+      message: "Job handler reported a retryable failure.",
       retryable: true
     };
   }
 
-  // Unclassified exceptions may happen after an external side effect succeeded.
-  // Never retry them automatically: reconcile the outcome or classify the error
-  // explicitly in a handler that knows the provider's idempotency guarantees.
-  if (error instanceof Error) {
-    return { code: "JOB_EXECUTION_UNCERTAIN", message: error.message || "Job execution failed.", retryable: false };
-  }
-
-  return { code: "JOB_EXECUTION_UNCERTAIN", message: "Job execution failed with a non-error value.", retryable: false };
+  // Exception text may contain credentials, provider response bodies, or user data.
+  // Never persist it in the durable job record. Unclassified failures may happen
+  // after an external side effect, so they remain non-retryable pending reconciliation.
+  return {
+    code: "JOB_EXECUTION_UNCERTAIN",
+    message: "Job execution outcome is uncertain; reconciliation may be required.",
+    retryable: false
+  };
 }
 
 export class JobWorker {
@@ -67,7 +71,7 @@ export class JobWorker {
       const result = await this.queue.markFailed(
         job.id,
         this.workerId,
-        { code: "UNKNOWN_JOB_TYPE", message: `No handler is registered for job type "${job.type}".` },
+        { code: "UNKNOWN_JOB_TYPE", message: "No handler is registered for this job type." },
         undefined,
         this.clock()
       );

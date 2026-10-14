@@ -84,7 +84,7 @@ describe("durable job worker", () => {
     expect(mocks.markFailed).toHaveBeenCalledWith(
       "job-a",
       "worker-a",
-      { code: "PROVIDER_BUSY", message: "Provider is busy." },
+      { code: "PROVIDER_BUSY", message: "Job handler reported a retryable failure." },
       new Date("2026-10-14T10:00:07.000Z"),
       failedAt
     );
@@ -101,9 +101,38 @@ describe("durable job worker", () => {
     expect(mocks.markFailed).toHaveBeenCalledWith(
       "job-a",
       "worker-a",
-      { code: "JOB_EXECUTION_UNCERTAIN", message: "Connection dropped after request." },
+      { code: "JOB_EXECUTION_UNCERTAIN", message: "Job execution outcome is uncertain; reconciliation may be required." },
       undefined,
       failedAt
+    );
+  });
+
+  it("never persists raw handler exception messages or unsafe retry codes", async () => {
+    mocks.handler.mockRejectedValue(new RetryableJobError(
+      "PROVIDER_BUSY token=secret",
+      "authorization=Bearer super-secret; response body contains private data"
+    ));
+
+    await expect(makeWorker().runNext()).resolves.toMatchObject({ status: "retry-scheduled", jobId: "job-a" });
+    expect(mocks.markFailed).toHaveBeenCalledWith(
+      "job-a",
+      "worker-a",
+      { code: "RETRYABLE_JOB_ERROR", message: "Job handler reported a retryable failure." },
+      expect.any(Date),
+      new Date("2026-10-14T10:00:00.000Z")
+    );
+  });
+
+  it("does not expose arbitrary exception text for unclassified failures", async () => {
+    mocks.handler.mockRejectedValue(new Error("database URL postgres://user:secret@host/private"));
+
+    await expect(makeWorker().runNext()).resolves.toEqual({ status: "failed", jobId: "job-a" });
+    expect(mocks.markFailed).toHaveBeenCalledWith(
+      "job-a",
+      "worker-a",
+      { code: "JOB_EXECUTION_UNCERTAIN", message: "Job execution outcome is uncertain; reconciliation may be required." },
+      undefined,
+      new Date("2026-10-14T10:00:00.000Z")
     );
   });
 
@@ -125,7 +154,7 @@ describe("durable job worker", () => {
     expect(mocks.markFailed).toHaveBeenCalledWith(
       "job-a",
       "worker-a",
-      { code: "UNKNOWN_JOB_TYPE", message: 'No handler is registered for job type "unknown.action".' },
+      { code: "UNKNOWN_JOB_TYPE", message: "No handler is registered for this job type." },
       undefined,
       new Date("2026-10-14T10:00:00.000Z")
     );
@@ -141,7 +170,7 @@ describe("durable job worker", () => {
     expect(mocks.markFailed).toHaveBeenCalledWith(
       "job-a",
       "worker-a",
-      { code: "UNKNOWN_JOB_TYPE", message: 'No handler is registered for job type "toString".' },
+      { code: "UNKNOWN_JOB_TYPE", message: "No handler is registered for this job type." },
       undefined,
       new Date("2026-10-14T10:00:00.000Z")
     );
