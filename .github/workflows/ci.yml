@@ -55,6 +55,11 @@ jobs:
       - name: Apply schema to clean PostgreSQL
         run: npx prisma db push --skip-generate
 
+      - name: Verify tenant-consistent foreign keys in PostgreSQL
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d bot_platform -v ON_ERROR_STOP=1 -f scripts/verify-tenant-constraints.sql
+
       - name: Generate initial migration baseline for review
         run: |
           mkdir -p /tmp/prisma-baseline/prisma/migrations/20261014000000_baseline
