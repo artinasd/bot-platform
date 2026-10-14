@@ -143,8 +143,13 @@ export const cache = {
       return value;
     }
 
-    const current = Number(localGet(key) ?? "0") + 1;
-    localSet(key, String(current), ttlSeconds);
+    const existingValue = localGet(key);
+    const existingEntry = existingValue === null ? undefined : localStore.get(key);
+    const current = Number(existingValue ?? "0") + 1;
+    localStore.set(key, {
+      value: String(current),
+      expiresAt: existingEntry?.expiresAt ?? Date.now() + ttlSeconds * 1000
+    });
     return current;
   },
 
