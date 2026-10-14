@@ -57,7 +57,7 @@ VALUES
   ('ticket-fk-a', 'tenant-fk-a', 'customer-fk-a', 'Ticket A', CURRENT_TIMESTAMP),
   ('ticket-fk-b', 'tenant-fk-b', 'customer-fk-b', 'Ticket B', CURRENT_TIMESTAMP);
 
-DO $
+DO $$
 BEGIN
   BEGIN
     INSERT INTO "Order" (
@@ -187,6 +187,6 @@ BEGIN
   EXCEPTION WHEN foreign_key_violation THEN
     NULL;
   END;
-END $;
+END $$;
 
 ROLLBACK;
