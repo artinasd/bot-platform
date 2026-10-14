@@ -116,6 +116,18 @@ export class JobQueue {
     });
   }
 
+  async renewLease(jobId: string, workerId: string, now = new Date()) {
+    if (!jobId.trim()) throw new Error("Job ID is required.");
+    if (!workerId.trim()) throw new Error("Worker ID is required.");
+
+    // Only the current owner may extend a live lease; a stale worker must not
+    // resurrect a job after another worker has recovered or claimed it.
+    return this.db.job.updateMany({
+      where: { id: jobId, status: JobStatus.RUNNING, lockedBy: workerId },
+      data: { lockedAt: now }
+    });
+  }
+
   async markSucceeded(jobId: string, workerId: string) {
     return this.db.job.updateMany({
       where: { id: jobId, status: JobStatus.RUNNING, lockedBy: workerId },

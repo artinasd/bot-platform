@@ -199,6 +199,37 @@ describe("durable job queue", () => {
     expect(mocks.jobFindUnique).not.toHaveBeenCalled();
   });
 
+  it("renews a running job lease only for its current worker", async () => {
+    const queue = makeQueue();
+    const now = new Date("2026-10-14T10:03:00.000Z");
+
+    await queue.renewLease("job-a", "worker-a", now);
+
+    expect(mocks.jobUpdateMany).toHaveBeenCalledWith({
+      where: { id: "job-a", status: JobStatus.RUNNING, lockedBy: "worker-a" },
+      data: { lockedAt: now }
+    });
+  });
+
+  it("does not renew a lease for a worker that no longer owns the job", async () => {
+    mocks.jobUpdateMany.mockResolvedValue({ count: 0 });
+    const queue = makeQueue();
+
+    await expect(queue.renewLease("job-a", "worker-old")).resolves.toEqual({ count: 0 });
+    expect(mocks.jobUpdateMany).toHaveBeenCalledWith({
+      where: { id: "job-a", status: JobStatus.RUNNING, lockedBy: "worker-old" },
+      data: { lockedAt: expect.any(Date) }
+    });
+  });
+
+  it("validates lease renewal identifiers before database access", async () => {
+    const queue = makeQueue();
+
+    await expect(queue.renewLease(" ", "worker-a")).rejects.toThrow("Job ID is required.");
+    await expect(queue.renewLease("job-a", " ")).rejects.toThrow("Worker ID is required.");
+    expect(mocks.jobUpdateMany).not.toHaveBeenCalled();
+  });
+
   it("marks success only for the worker that currently owns the running job", async () => {
     const queue = makeQueue();
 
