@@ -1,10 +1,27 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
 
-const scrypt = promisify(scryptCallback);
 const KEY_LENGTH = 64;
 const SALT_LENGTH = 16;
 const PARAMETERS = { N: 16384, r: 8, p: 1 };
+const MAX_MEMORY = 64 * 1024 * 1024;
+
+function deriveKey(password: string, salt: Buffer, keyLength: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scryptCallback(
+      password,
+      salt,
+      keyLength,
+      { ...PARAMETERS, maxmem: MAX_MEMORY },
+      (error, derivedKey) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(derivedKey);
+      }
+    );
+  });
+}
 
 export async function hashPassword(password: string): Promise<string> {
   if (password.length < 12 || password.length > 1024) {
@@ -12,14 +29,16 @@ export async function hashPassword(password: string): Promise<string> {
   }
 
   const salt = randomBytes(SALT_LENGTH);
-  const derived = await scrypt(password, salt, KEY_LENGTH, {
-    N: PARAMETERS.N,
-    r: PARAMETERS.r,
-    p: PARAMETERS.p,
-    maxmem: 64 * 1024 * 1024
-  }) as Buffer;
+  const derived = await deriveKey(password, salt, KEY_LENGTH);
 
-  return ["scrypt", PARAMETERS.N, PARAMETERS.r, PARAMETERS.p, salt.toString("base64url"), derived.toString("base64url")].join("$");
+  return [
+    "scrypt",
+    PARAMETERS.N,
+    PARAMETERS.r,
+    PARAMETERS.p,
+    salt.toString("base64url"),
+    derived.toString("base64url")
+  ].join("$");
 }
 
 export async function verifyPassword(password: string, encoded: string): Promise<boolean> {
@@ -36,12 +55,7 @@ export async function verifyPassword(password: string, encoded: string): Promise
   if (salt.length !== SALT_LENGTH || expected.length !== KEY_LENGTH) return false;
 
   try {
-    const actual = await scrypt(password, salt, KEY_LENGTH, {
-      N: n,
-      r,
-      p,
-      maxmem: 64 * 1024 * 1024
-    }) as Buffer;
+    const actual = await deriveKey(password, salt, KEY_LENGTH);
     return timingSafeEqual(actual, expected);
   } catch {
     return false;
