@@ -1,4 +1,4 @@
-import { ProviderOperationStatus } from "@prisma/client";
+import { JobStatus, ProviderOperationStatus } from "@prisma/client";
 import type { CreateProviderOperationInput } from "./provider-operation.service";
 import { ProviderOperationService } from "./provider-operation.service";
 import { JobQueue } from "../../infrastructure/jobs/job-queue";
@@ -48,12 +48,21 @@ export class ProviderOperationSchedulingService {
       type: PROVIDER_OPERATION_JOB_TYPE,
       payload: { operationId: operation.id },
       idempotencyKey: `provider-operation:${operation.id}`,
-      // Use a stable correlation ID so retries of the same idempotent request
-      // cannot conflict merely because they arrived through different callers.
+      // Stable across repeated requests; caller-specific correlation IDs are
+      // not persisted on ProviderOperation and therefore cannot be replayed.
       correlationId: operation.id,
       ...(input.runAt ? { runAt: input.runAt } : {}),
       ...(input.maxAttempts !== undefined ? { maxAttempts: input.maxAttempts } : {})
     });
+
+    if (job.status === JobStatus.FAILED || job.status === JobStatus.CANCELLED) {
+      throw new Error(
+        `Provider operation job is already terminal (${job.status}); explicit requeue is required.`
+      );
+    }
+    if (job.status === JobStatus.SUCCEEDED && operation.status !== ProviderOperationStatus.SUCCEEDED) {
+      throw new Error("Provider operation job succeeded while the operation is not successful; reconcile before proceeding.");
+    }
 
     return { ...created, job, scheduled: true };
   }

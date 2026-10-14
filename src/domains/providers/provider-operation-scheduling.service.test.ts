@@ -1,4 +1,4 @@
-import { ProviderOperationStatus } from "@prisma/client";
+import { JobStatus, ProviderOperationStatus } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { JobQueue } from "../../infrastructure/jobs/job-queue";
 import { ProviderOperationService } from "./provider-operation.service";
@@ -35,7 +35,7 @@ describe("provider operation scheduling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.create.mockResolvedValue({ operation, duplicate: false });
-    mocks.enqueue.mockResolvedValue({ id: "job-a", status: "QUEUED" });
+    mocks.enqueue.mockResolvedValue({ id: "job-a", status: JobStatus.QUEUED });
   });
 
   it("creates an idempotent operation and schedules a tenant-scoped durable job", async () => {
@@ -92,6 +92,23 @@ describe("provider operation scheduling", () => {
       runAt,
       maxAttempts: 3
     }));
+  });
+
+  it.each([JobStatus.FAILED, JobStatus.CANCELLED])(
+    "does not report a terminal queue job as scheduled (%s)",
+    async (status) => {
+      mocks.enqueue.mockResolvedValue({ id: "job-a", status });
+      await expect(makeService().schedule(input)).rejects.toThrow(
+        `Provider operation job is already terminal (${status}); explicit requeue is required.`
+      );
+    }
+  );
+
+  it("rejects an inconsistent succeeded job when the provider operation is still pending", async () => {
+    mocks.enqueue.mockResolvedValue({ id: "job-a", status: JobStatus.SUCCEEDED });
+    await expect(makeService().schedule(input)).rejects.toThrow(
+      "Provider operation job succeeded while the operation is not successful; reconcile before proceeding."
+    );
   });
 
   it("leaves a created operation recoverable when queue insertion fails", async () => {
