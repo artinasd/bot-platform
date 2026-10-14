@@ -1,6 +1,8 @@
 import { ProviderOperationStatus, type ProviderOperation } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { createProviderOperationExecutorRegistry } from "./provider-operation-executor-registry";
+import { createStrictProviderRequestPayloadValidator } from "./provider-operation-request-schema";
 
 const operation = {
   id: "operation-a",
@@ -29,10 +31,8 @@ describe("provider-operation executor registry", () => {
 
   it("validates action-specific request payloads before invoking the executor", async () => {
     const execute = vi.fn().mockResolvedValue({ providerRef: "provider-ref-a" });
-    const validateRequestPayload = vi.fn((payload: unknown) => {
-      if (payload === null || typeof payload !== "object" || !("plan" in payload)) {
-        throw new Error("invalid request");
-      }
+    const validateRequestPayload = createStrictProviderRequestPayloadValidator({
+      plan: z.string().trim().min(1).max(80)
     });
     const registry = createProviderOperationExecutorRegistry([
       { providerType: "TEST", action: "subscription.create", validateRequestPayload, execute }
