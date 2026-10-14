@@ -60,7 +60,9 @@ export class ProviderOperationService {
     validateRequired(input.action, "Provider action", 100);
     validateRequired(input.idempotencyKey, "Idempotency key");
 
-    const requestPayload = validateProviderOperationRequestPayload(input.requestPayload ?? {});
+    const requestPayload = validateProviderOperationRequestPayload(
+      input.requestPayload === undefined ? {} : input.requestPayload
+    );
     try {
       return await this.db.$transaction(async (tx) => {
         const existing = await tx.providerOperation.findFirst({
