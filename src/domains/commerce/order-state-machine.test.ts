@@ -15,4 +15,12 @@ describe("order state machine", () => {
   it("does not allow transitions out of refunded", () => {
     expect(() => transitionOrder(OrderStatus.REFUNDED, OrderStatus.PAID)).toThrow(InvalidOrderTransitionError);
   });
+
+  it("allows a retryable fulfillment failure to retry provisioning", () => {
+    expect(transitionOrder(OrderStatus.FAILED_RETRYABLE, OrderStatus.PROVISIONING)).toBe(OrderStatus.PROVISIONING);
+  });
+
+  it("does not allow cancellation after delivery", () => {
+    expect(canTransitionOrder(OrderStatus.DELIVERED, OrderStatus.CANCELLED)).toBe(false);
+  });
 });
