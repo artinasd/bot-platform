@@ -41,12 +41,33 @@ export class JobQueue {
     if (!workerId.trim()) throw new Error("Worker ID is required.");
 
     return this.db.$transaction(async (tx) => {
+      const staleBefore = new Date(now.getTime() - 5 * 60 * 1000);
+
+      // Recover leases abandoned by workers that crashed or timed out.
+      // The previous claim already counted as an attempt, so exhausted jobs fail here.
+      await tx.$executeRaw`
+        UPDATE "Job"
+        SET
+          "status" = CASE
+            WHEN "attempts" >= "maxAttempts" THEN 'FAILED'::"JobStatus"
+            ELSE 'RETRY_WAIT'::"JobStatus"
+          END,
+          "runAt" = ${now},
+          "lockedAt" = NULL,
+          "lockedBy" = NULL,
+          "lastErrorCode" = 'WORKER_LEASE_EXPIRED',
+          "lastError" = 'Worker lease expired before the job was completed.'
+        WHERE "status" = 'RUNNING'
+          AND "lockedAt" IS NOT NULL
+          AND "lockedAt" < ${staleBefore}
+      `;
+
       const candidates = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT "id"
         FROM "Job"
         WHERE "status" IN ('QUEUED', 'RETRY_WAIT')
           AND "runAt" <= ${now}
-          AND ("lockedAt" IS NULL OR "lockedAt" < ${new Date(now.getTime() - 5 * 60 * 1000)})
+          AND ("lockedAt" IS NULL OR "lockedAt" < ${staleBefore})
         ORDER BY "runAt" ASC, "createdAt" ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1
