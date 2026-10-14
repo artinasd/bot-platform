@@ -6,6 +6,7 @@ import { ProviderOperationExecutionError } from "./provider-operation-job-handle
 export type ProviderOperationExecutorRegistration = Readonly<{
   providerType: string;
   action: string;
+  validateRequestPayload: (payload: unknown) => void;
   execute: ProviderOperationExecutor;
 }>;
 
@@ -24,13 +25,16 @@ export function createProviderOperationExecutorRegistry(
     throw new Error("At least one provider-operation executor must be registered.");
   }
 
-  const executors = new Map<string, ProviderOperationExecutor>();
+  const executors = new Map<string, ProviderOperationExecutorRegistration>();
   for (const registration of registrations) {
     if (typeof registration.providerType !== "string" || registration.providerType.trim().length === 0 || registration.providerType.trim() !== registration.providerType) {
       throw new Error("Provider-operation provider type must be a non-empty canonical string.");
     }
     if (typeof registration.action !== "string" || registration.action.trim().length === 0 || registration.action.trim() !== registration.action) {
       throw new Error("Provider-operation action must be a non-empty canonical string.");
+    }
+    if (typeof registration.validateRequestPayload !== "function") {
+      throw new Error(`Request validator for "${registration.providerType}" action "${registration.action}" must be a function.`);
     }
     if (typeof registration.execute !== "function") {
       throw new Error(`Executor for "${registration.providerType}" action "${registration.action}" must be a function.`);
@@ -39,18 +43,27 @@ export function createProviderOperationExecutorRegistry(
     if (executors.has(key)) {
       throw new Error(`Provider-operation executor for "${registration.providerType}" action "${registration.action}" is already registered.`);
     }
-    executors.set(key, registration.execute);
+    executors.set(key, registration);
   }
 
   return async (operation: ProviderOperation, credentials: ActiveProviderCredentials) => {
-    const executor = executors.get(executorKey(credentials.providerType, operation.action));
-    if (!executor) {
+    const registration = executors.get(executorKey(credentials.providerType, operation.action));
+    if (!registration) {
       throw new ProviderOperationExecutionError(
         ProviderOperationStatus.PERMANENT_FAILURE,
         "PROVIDER_EXECUTOR_UNSUPPORTED",
         "No provider executor is registered for this connection type and action."
       );
     }
-    return executor(operation, credentials);
+    try {
+      registration.validateRequestPayload(operation.requestPayload);
+    } catch {
+      throw new ProviderOperationExecutionError(
+        ProviderOperationStatus.PERMANENT_FAILURE,
+        "PROVIDER_REQUEST_INVALID",
+        "Provider operation request payload failed action-specific validation."
+      );
+    }
+    return registration.execute(operation, credentials);
   };
 }

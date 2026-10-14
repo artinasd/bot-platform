@@ -27,6 +27,26 @@ describe("provider-operation executor registry", () => {
     expect(execute).toHaveBeenCalledWith(operation, credentials);
   });
 
+  it("validates action-specific request payloads before invoking the executor", async () => {
+    const execute = vi.fn().mockResolvedValue({ providerRef: "provider-ref-a" });
+    const validateRequestPayload = vi.fn((payload: unknown) => {
+      if (payload === null || typeof payload !== "object" || !("plan" in payload)) {
+        throw new Error("invalid request");
+      }
+    });
+    const registry = createProviderOperationExecutorRegistry([
+      { providerType: "TEST", action: "subscription.create", validateRequestPayload, execute }
+    ]);
+    const invalidOperation = { ...operation, requestPayload: { unexpected: true } } as ProviderOperation;
+    await expect(registry(invalidOperation, credentials)).rejects.toMatchObject({
+      name: "ProviderOperationExecutionError",
+      status: ProviderOperationStatus.PERMANENT_FAILURE,
+      code: "PROVIDER_REQUEST_INVALID"
+    });
+    expect(validateRequestPayload).toHaveBeenCalledWith(invalidOperation.requestPayload);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("fails closed for an unregistered action without invoking an executor", async () => {
     const execute = vi.fn();
     const registry = createProviderOperationExecutorRegistry([
