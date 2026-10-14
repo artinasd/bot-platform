@@ -23,6 +23,10 @@ const MAX_ATTEMPTS = 5;
 const WINDOW_SECONDS = 60 * 60;
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === "production" && cache.mode !== "upstash") {
+    return NextResponse.json({ error: { code: "RATE_LIMIT_UNAVAILABLE", message: "Authentication is temporarily unavailable." } }, { status: 503 });
+  }
+
   const parsed = registrationSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: { code: "INVALID_REQUEST", message: "The registration request is invalid." } }, { status: 400 });
