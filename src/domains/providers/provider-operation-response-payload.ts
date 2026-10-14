@@ -19,18 +19,26 @@ export function validateProviderOperationResponsePayload(value: unknown): Prisma
   }
 
   const record = value as Record<string, unknown>;
+  const normalized: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const [key, fieldValue] of Object.entries(record)) {
     if (!ALLOWED_FIELDS.has(key)) {
       throw new Error("Provider response payload contains an unsupported field.");
     }
-    if (typeof fieldValue !== "string" || !fieldValue.trim() || fieldValue.length > MAX_FIELD_LENGTH) {
+    if (
+      typeof fieldValue !== "string" ||
+      !fieldValue.trim() ||
+      fieldValue.length > MAX_FIELD_LENGTH ||
+      fieldValue.trim() !== fieldValue ||
+      /[\\u0000-\\u001f\\u007f]/.test(fieldValue)
+    ) {
       throw new Error("Provider response payload contains an invalid field value.");
     }
+    normalized[key] = fieldValue;
   }
 
   let serialized: string;
   try {
-    serialized = JSON.stringify(record);
+    serialized = JSON.stringify(normalized);
   } catch {
     throw new Error("Provider response payload is not valid JSON.");
   }
@@ -38,5 +46,5 @@ export function validateProviderOperationResponsePayload(value: unknown): Prisma
     throw new Error("Provider response payload exceeds the size limit.");
   }
 
-  return record as Prisma.InputJsonValue;
+  return normalized as Prisma.InputJsonValue;
 }
