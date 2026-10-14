@@ -41,7 +41,7 @@ Do not run db:push or migrations against production without reviewing the genera
 | DATABASE_URL | PostgreSQL pooled/runtime connection URL |
 | DIRECT_URL | Direct PostgreSQL connection URL for Prisma schema operations |
 | UPSTASH_REDIS_REST_URL | Upstash Redis REST endpoint |
-| UPSTASH_REDIS_REST_TOKEN | Upstash Redis REST token |
+| UPSTASH_REDIS_REST_TOKEN | Upstash Redis token |
 | APP_URL | Application base URL |
 | APP_REGION | Preferred deployment region |
 | AUTH_SECRET | Reserved for future signed artifacts; opaque sessions currently use random tokens stored as hashes in PostgreSQL |
@@ -62,6 +62,10 @@ Do not run db:push or migrations against production without reviewing the genera
 | LOG_LEVEL | Application log verbosity |
 
 Never commit real credentials. Rotate any credential accidentally committed to repository history.
+
+## Durable job worker
+
+The queue can lease one due job at a time through `JobQueue.claimNext`. `JobWorker` dispatches only explicitly registered job types and reports success or failure only while the worker still owns a live lease. Handlers may throw `RetryableJobError` only when they know retrying is safe; retry delays use bounded exponential backoff. Unclassified exceptions are treated as uncertain outcomes and are not automatically retried, because an external side effect may already have happened. Unknown job types fail closed. This is an execution primitive, not a deployed scheduler or a provider integration; no external jobs are run by this change.
 
 ## Architecture guardrails
 
