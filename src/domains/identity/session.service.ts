@@ -75,7 +75,7 @@ export class SessionService {
         user: { status: RecordStatus.ACTIVE },
         OR: [
           { tenantId: null },
-          { tenant: { status: TenantStatus.ACTIVE } }
+          { tenant: { is: { status: TenantStatus.ACTIVE } } }
         ]
       },
       select: {
