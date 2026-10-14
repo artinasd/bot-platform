@@ -51,10 +51,12 @@ Before registering a production adapter or exposing a dispatch endpoint:
 
 The current repository provides execution primitives and registries, not these vendor-specific guarantees. Do not enable real provider calls until a concrete adapter satisfies this contract.
 
-## Current schema integration gap
+## Provider connection routing status
 
-The current `ProviderOperation` model does not contain a `providerConnectionId` relation or field. The credential resolver therefore cannot yet select a connection from an operation in a safe, deterministic way. Do not work around this by putting credential material in `requestPayload`, selecting a connection by an untrusted provider name, or choosing the first active connection.
+`ProviderOperation` now persists a required `providerConnectionId` with a composite relation to `ProviderConnection` on `[tenantId, id]`. The operation-creation service checks that the selected connection is active and belongs to the same tenant. The connection ID is part of idempotency comparison, so reusing a key to switch provider accounts is rejected. PostgreSQL constraint verification also covers cross-tenant connection references.
 
-Before wiring a concrete executor, add an explicit tenant-scoped association between each provider operation and the intended provider connection (or another reviewed, immutable routing record). Validate that the selected connection belongs to the operation's tenant and supports the requested action. Treat the association as part of idempotency validation so a duplicate operation key cannot silently switch provider accounts. Implement the schema change with a reviewed Prisma migration and tests for cross-tenant references, missing/inactive connections, and conflicting idempotent requests.
+The current CI workflow generates an initial migration baseline from an empty schema for review; it is **not** an upgrade migration for an existing database. This repository has no checked-in migration history. Do not apply the generated baseline to an existing environment or deploy the required column to a populated database without a separately reviewed rollout plan. That plan must inventory existing provider operations, choose and validate their intended connections, backfill the association, then enforce the non-null and composite foreign-key constraints. Never guess a connection or backfill by selecting the first active connection.
 
-The new credential resolver is a building block only; it is not yet connected to the worker or executor registry.
+Before wiring a concrete executor, verify that the selected connection supports the operation's action and that inactive/revoked connections are handled safely at execution time. Keep credentials out of `requestPayload`, browser inputs, and logs.
+
+The credential resolver remains a building block; it is not yet connected to the worker or executor registry.
