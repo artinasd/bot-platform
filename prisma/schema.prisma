@@ -273,6 +273,8 @@ model Customer {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders           Order[]
+  @@unique([tenantId, id])
   @@unique([tenantId, telegramId])
   @@index([tenantId, username])
   @@index([tenantId, phone])
@@ -333,6 +335,9 @@ model Product {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plans         Plan[]
+  orderItems    OrderItem[]
+  @@unique([tenantId, id])
   @@unique([tenantId, slug])
   @@index([tenantId, type, status])
 }
@@ -355,6 +360,9 @@ model Plan {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product         Product  @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+  orderItems      OrderItem[]
+  @@unique([tenantId, productId, id])
   @@unique([tenantId, slug])
   @@index([tenantId, productId, status])
 }
@@ -474,6 +482,9 @@ model Order {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer       Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  items          OrderItem[]
+  @@unique([tenantId, id])
   @@unique([tenantId, orderNumber])
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, customerId, createdAt])
@@ -492,6 +503,9 @@ model OrderItem {
   configuration   Json     @default("{}")
   createdAt       DateTime @default(now())
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order           Order    @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  product         Product  @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+  plan            Plan?    @relation(fields: [tenantId, productId, planId], references: [tenantId, productId, id], onDelete: Restrict)
   @@index([tenantId, orderId])
 }
 
