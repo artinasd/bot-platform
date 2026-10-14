@@ -108,3 +108,10 @@ GitHub Actions runs Prisma validation/generation, TypeScript checks, ESLint, uni
 ## Provider-operation scheduling
 
 `ProviderOperationSchedulingService` creates or retrieves an idempotent tenant-scoped provider operation and ensures a durable `provider.operation.execute` job is present. The job payload contains only the operation ID; tenant ownership comes from the persisted operation and is checked again by the handler. Successful, unknown, and permanently failed operations are not scheduled for blind execution. The job uses the operation ID as a stable correlation ID so repeated requests cannot conflict because of caller-specific tracing IDs. The operation and job writes are not atomic; if enqueueing fails, repeating the same idempotent request can complete scheduling. Existing FAILED or CANCELLED jobs are reported as requiring explicit requeue rather than being misreported as scheduled, and an inconsistent succeeded job is rejected for reconciliation. This service does not supply a provider adapter or run jobs by itself.
+
+
+## Provider-operation executor registry and explicit retry
+
+`createProviderOperationExecutorRegistry` routes exact persisted action names to explicitly registered executor functions and rejects duplicate or non-canonical registrations. Unsupported actions fail closed as permanent failures; this registry does not implement a vendor API.
+
+`ProviderOperationRetryService` is an explicit recovery path for operations already classified as `RETRYABLE_FAILURE`. It refuses `UNKNOWN`, permanently failed, successful, or currently active operations; checks a bounded operation-attempt budget; and transactionally returns an eligible operation to `PENDING` while creating its next job. A retry job receives a generation-specific idempotency key derived from the operation attempt count. If the database transaction fails, neither state change is committed. This is a domain primitive, not an HTTP endpoint or automatic retry scheduler. Provider-specific error classification and reconciliation remain mandatory before retrying side effects.
