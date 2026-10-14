@@ -98,3 +98,8 @@ GitHub Actions runs Prisma validation/generation, TypeScript checks, ESLint, uni
 ## Provider-operation recovery sweep
 
 `ProviderOperationRecoveryService` provides a bounded maintenance sweep for stale provider operations. It scans at most 500 tenants per call by default, considers only operations still marked `RUNNING` for at least five minutes, and transitions those operations to `UNKNOWN` through the tenant-scoped provider-operation service. It deliberately does not retry the provider action or decide whether it succeeded. Run it from a trusted scheduler/maintenance worker, then reconcile each unknown outcome against the provider before any retry. The sweep is not wired to an HTTP endpoint or automatically scheduled.
+
+
+## Explicit job-handler registry
+
+`createJobHandlerRegistry` constructs a frozen registry from explicit `{ type, handler }` registrations. It rejects empty registries, blank/non-canonical types, non-callable handlers, and duplicate job types instead of silently overwriting a registration. The registry uses a null prototype, so inherited object properties cannot masquerade as handlers. This is a registration primitive only: it does not activate a scheduler, expose an HTTP endpoint, or claim queued work. A dispatch endpoint should not be enabled until real handlers and their dependencies are explicitly wired and readiness is checked before any job is claimed.
