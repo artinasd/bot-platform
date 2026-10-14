@@ -39,6 +39,11 @@ VALUES (
   100, 100, 'order-fk-b', CURRENT_TIMESTAMP
 );
 
+INSERT INTO "OrderItem" ("id", "tenantId", "orderId", "productId", "unitPriceMinor", "totalPriceMinor")
+VALUES
+  ('item-fk-a', 'tenant-fk-a', 'order-fk-a', 'product-fk-a', 100, 100),
+  ('item-fk-b', 'tenant-fk-b', 'order-fk-b', 'product-fk-b', 100, 100);
+
 INSERT INTO "Payment" ("id", "tenantId", "orderId", "amountMinor", "idempotencyKey", "provider", "updatedAt")
 VALUES
   ('payment-fk-a', 'tenant-fk-a', 'order-fk-a', 100, 'payment-fk-a', 'test', CURRENT_TIMESTAMP),
