@@ -19,6 +19,10 @@ const MAX_ATTEMPTS = 10;
 const WINDOW_SECONDS = 15 * 60;
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === "production" && cache.mode !== "upstash") {
+    return NextResponse.json({ error: { code: "RATE_LIMIT_UNAVAILABLE", message: "Authentication is temporarily unavailable." } }, { status: 503 });
+  }
+
   const parsed = loginSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: { code: "INVALID_REQUEST", message: "The login request is invalid." } }, { status: 400 });
