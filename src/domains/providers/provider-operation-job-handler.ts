@@ -1,9 +1,11 @@
 import { ProviderOperationStatus, type Job, type Prisma, type ProviderOperation } from "@prisma/client";
 import { RetryableJobError } from "../../infrastructure/jobs/job-worker";
+import { ProviderConnectionCredentialsService, type ActiveProviderCredentials } from "./provider-connection-credentials.service";
 import { ProviderOperationService, type ProviderOperationFailureStatus } from "./provider-operation.service";
 
 export type ProviderOperationExecutor = (
-  operation: ProviderOperation
+  operation: ProviderOperation,
+  credentials: ActiveProviderCredentials
 ) => Promise<Prisma.InputJsonValue>;
 
 export class ProviderOperationExecutionError extends Error {
@@ -40,12 +42,13 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * Bridges durable jobs to provider operations. The executor must use the
- * operation's idempotencyKey when supported by the provider. Unknown outcomes
- * are never retried automatically; they require explicit reconciliation.
+ * Bridges durable jobs to provider operations. Credentials are resolved from
+ * the operation's explicit active tenant connection immediately before the
+ * executor is invoked. Unknown outcomes are never retried automatically.
  */
 export function createProviderOperationJobHandler(
   service: ProviderOperationService,
+  credentialsService: ProviderConnectionCredentialsService,
   execute: ProviderOperationExecutor
 ): (job: Job) => Promise<void> {
   return async (job: Job) => {
@@ -75,9 +78,32 @@ export function createProviderOperationJobHandler(
       throw new Error("Provider operation could not be claimed; it may already be running or terminal.");
     }
 
+    let credentials: ActiveProviderCredentials;
+    try {
+      if (!operation.providerConnectionId?.trim()) {
+        throw new Error("Provider connection ID is missing.");
+      }
+      credentials = await credentialsService.getActiveCredentials(
+        tenantId,
+        operation.providerConnectionId
+      );
+    } catch {
+      const message = "Active provider connection could not be resolved; no provider request was sent.";
+      const recorded = await service.markFailed(
+        tenantId,
+        operationId,
+        ProviderOperationStatus.PERMANENT_FAILURE,
+        message
+      );
+      if (!recorded) {
+        throw new Error("Provider connection failure could not be recorded; no provider request was sent.");
+      }
+      throw new Error("Provider connection is unavailable; provider action was not executed.");
+    }
+
     let responsePayload: Prisma.InputJsonValue;
     try {
-      responsePayload = await execute(operation);
+      responsePayload = await execute(operation, credentials);
     } catch (error) {
       const status = error instanceof ProviderOperationExecutionError
         ? error.status

@@ -6,7 +6,7 @@ This document defines the integration boundary for provider adapters. It does no
 
 ## Existing execution contract
 
-The provider-operation handler invokes an injected executor with the persisted `ProviderOperation`. The executor returns a JSON-compatible response payload or throws `ProviderOperationExecutionError`. The operation is tenant-scoped and is claimed before the external action is called.
+The provider-operation handler claims the tenant-scoped operation, then resolves `providerConnectionId` through `ProviderConnectionCredentialsService` using the job tenant immediately before invoking an injected executor. The executor receives the persisted `ProviderOperation` and the resolved active connection credentials as separate server-side arguments. The executor returns a JSON-compatible response payload or throws `ProviderOperationExecutionError`. If the connection ID is absent, inactive, revoked, cross-tenant, or cannot be decrypted, the handler records a permanent pre-execution failure and never calls the executor; raw resolver errors are not persisted.
 
 Persisted `action` names are routed by the explicit executor registry. An action that is not registered fails closed. Do not map arbitrary user input directly to a provider method.
 
@@ -16,7 +16,7 @@ Every concrete adapter must:
 
 1. **Validate the action input.** Parse and validate `requestPayload` against an action-specific schema before making a network request. Reject unknown fields when they could alter provider behavior.
 2. **Use the operation idempotency key.** Pass `operation.idempotencyKey` to the provider's idempotency mechanism when supported. If the provider has no idempotency support, document the duplicate-side-effect risk and provide a provider-specific reconciliation strategy before enabling the action.
-3. **Scope credentials to the tenant connection.** Resolve credentials from a tenant-owned provider connection using server-side authorization. Never accept provider credentials from an order payload, browser, or Telegram message.
+3. **Use only the resolved tenant connection credentials.** Consume credentials supplied by the server-side execution boundary. Never accept provider credentials from an order payload, browser, or Telegram message.
 4. **Apply bounded network controls.** Use explicit connection and total timeouts, bounded response sizes, and a bounded retry policy for safe read-only lookups. Do not blindly retry side-effecting requests after a timeout or connection loss.
 5. **Classify outcomes conservatively.** Use `RETRYABLE_FAILURE` only when there is reliable evidence that the action was not applied and a repeat is safe. Use `PERMANENT_FAILURE` for confirmed non-retryable rejection. Treat timeouts, dropped connections after submission, malformed success responses, and ambiguous server errors as `UNKNOWN` unless provider documentation gives a reliable way to determine the outcome.
 6. **Return a minimal JSON response.** Store only identifiers and fields required for fulfillment and reconciliation. Do not return access tokens, passwords, private keys, full provider credentials, or unnecessary personal data.
@@ -57,6 +57,4 @@ The current repository provides execution primitives and registries, not these v
 
 The current CI workflow generates an initial migration baseline from an empty schema for review; it is **not** an upgrade migration for an existing database. This repository has no checked-in migration history. Do not apply the generated baseline to an existing environment or deploy the required column to a populated database without a separately reviewed rollout plan. That plan must inventory existing provider operations, choose and validate their intended connections, backfill the association, then enforce the non-null and composite foreign-key constraints. Never guess a connection or backfill by selecting the first active connection.
 
-Before wiring a concrete executor, verify that the selected connection supports the operation's action and that inactive/revoked connections are handled safely at execution time. Keep credentials out of `requestPayload`, browser inputs, and logs.
-
-The credential resolver remains a building block; it is not yet connected to the worker or executor registry.
+The credential resolver is now wired into the provider-operation job handler. Every execution rechecks the exact connection ID against the job tenant and requires the connection to remain active. Missing IDs and resolver failures are handled before executor invocation, without persisting raw resolver errors. Concrete provider adapters remain unimplemented and real provider calls remain disabled until adapter behavior and the database migration rollout are reviewed.

@@ -6,21 +6,29 @@ const operation = {
   id: "operation-a",
   tenantId: "tenant-a",
   action: "subscription.create",
-  idempotencyKey: "operation-key-a"
+  idempotencyKey: "operation-key-a",
+  providerConnectionId: "connection-a"
 } as ProviderOperation;
 
+const credentials = {
+  connectionId: "connection-a",
+  providerType: "TEST",
+  credentials: "secret",
+  config: {}
+};
+
 describe("provider-operation executor registry", () => {
-  it("routes an exact registered action to its executor", async () => {
+  it("routes an exact registered action and resolved credentials to its executor", async () => {
     const execute = vi.fn().mockResolvedValue({ providerRef: "provider-ref-a" });
     const registry = createProviderOperationExecutorRegistry([{ action: "subscription.create", execute }]);
-    await expect(registry(operation)).resolves.toEqual({ providerRef: "provider-ref-a" });
-    expect(execute).toHaveBeenCalledWith(operation);
+    await expect(registry(operation, credentials)).resolves.toEqual({ providerRef: "provider-ref-a" });
+    expect(execute).toHaveBeenCalledWith(operation, credentials);
   });
 
   it("fails closed for unregistered actions without invoking an executor", async () => {
     const execute = vi.fn();
     const registry = createProviderOperationExecutorRegistry([{ action: "subscription.create", execute }]);
-    await expect(registry({ ...operation, action: "subscription.delete" })).rejects.toMatchObject({
+    await expect(registry({ ...operation, action: "subscription.delete" }, credentials)).rejects.toMatchObject({
       name: "ProviderOperationExecutionError",
       status: ProviderOperationStatus.PERMANENT_FAILURE,
       code: "PROVIDER_ACTION_UNSUPPORTED"

@@ -1,4 +1,5 @@
 import { ProviderOperationStatus, type ProviderOperation } from "@prisma/client";
+import type { ActiveProviderCredentials } from "./provider-connection-credentials.service";
 import type { ProviderOperationExecutor } from "./provider-operation-job-handler";
 import { ProviderOperationExecutionError } from "./provider-operation-job-handler";
 
@@ -32,7 +33,7 @@ export function createProviderOperationExecutorRegistry(
     executors.set(registration.action, registration.execute);
   }
 
-  return async (operation: ProviderOperation) => {
+  return async (operation: ProviderOperation, credentials: ActiveProviderCredentials) => {
     const executor = executors.get(operation.action);
     if (!executor) {
       throw new ProviderOperationExecutionError(
@@ -41,6 +42,6 @@ export function createProviderOperationExecutorRegistry(
         `No provider executor is registered for action "${operation.action}".`
       );
     }
-    return executor(operation);
+    return executor(operation, credentials);
   };
 }

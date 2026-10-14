@@ -8,12 +8,14 @@ const mocks = vi.hoisted(() => ({
   claim: vi.fn(),
   markSucceeded: vi.fn(),
   markFailed: vi.fn(),
-  execute: vi.fn()
+  execute: vi.fn(),
+  getActiveCredentials: vi.fn()
 }));
 
 const operation = {
   id: "operation-a",
   tenantId: "tenant-a",
+  providerConnectionId: "connection-a",
   status: ProviderOperationStatus.PENDING,
   idempotencyKey: "operation-key",
   action: "subscription.create",
@@ -33,7 +35,10 @@ function makeHandler() {
     markSucceeded: mocks.markSucceeded,
     markFailed: mocks.markFailed
   } as unknown as ProviderOperationService;
-  return createProviderOperationJobHandler(service, mocks.execute);
+  const credentialsService = {
+    getActiveCredentials: mocks.getActiveCredentials
+  } as unknown as import("./provider-connection-credentials.service").ProviderConnectionCredentialsService;
+  return createProviderOperationJobHandler(service, credentialsService, mocks.execute);
 }
 
 describe("provider-operation job handler", () => {
@@ -44,13 +49,23 @@ describe("provider-operation job handler", () => {
     mocks.markSucceeded.mockResolvedValue(true);
     mocks.markFailed.mockResolvedValue(true);
     mocks.execute.mockResolvedValue({ providerRef: "ref-a" });
+    mocks.getActiveCredentials.mockResolvedValue({
+      connectionId: "connection-a",
+      providerType: "TEST",
+      credentials: "server-secret",
+      config: {}
+    });
   });
 
-  it("claims the tenant-scoped operation, executes it, and records its response", async () => {
+  it("claims the tenant-scoped operation, resolves its connection, executes, and records its response", async () => {
     await expect(makeHandler()(job)).resolves.toBeUndefined();
     expect(mocks.getById).toHaveBeenCalledWith("tenant-a", "operation-a");
     expect(mocks.claim).toHaveBeenCalledWith("tenant-a", "operation-a");
-    expect(mocks.execute).toHaveBeenCalledWith({ ...operation, status: ProviderOperationStatus.RUNNING });
+    expect(mocks.getActiveCredentials).toHaveBeenCalledWith("tenant-a", "connection-a");
+    expect(mocks.execute).toHaveBeenCalledWith(
+      { ...operation, status: ProviderOperationStatus.RUNNING },
+      { connectionId: "connection-a", providerType: "TEST", credentials: "server-secret", config: {} }
+    );
     expect(mocks.markSucceeded).toHaveBeenCalledWith("tenant-a", "operation-a", { providerRef: "ref-a" });
   });
 
@@ -58,6 +73,7 @@ describe("provider-operation job handler", () => {
     mocks.getById.mockResolvedValue({ ...operation, status: ProviderOperationStatus.SUCCEEDED });
     await expect(makeHandler()(job)).resolves.toBeUndefined();
     expect(mocks.claim).not.toHaveBeenCalled();
+    expect(mocks.getActiveCredentials).not.toHaveBeenCalled();
     expect(mocks.execute).not.toHaveBeenCalled();
   });
 
@@ -65,6 +81,28 @@ describe("provider-operation job handler", () => {
     mocks.getById.mockResolvedValue({ ...operation, status: ProviderOperationStatus.UNKNOWN });
     await expect(makeHandler()(job)).rejects.toThrow(/must be reconciled/);
     expect(mocks.claim).not.toHaveBeenCalled();
+    expect(mocks.getActiveCredentials).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when active tenant credentials cannot be resolved", async () => {
+    mocks.getActiveCredentials.mockRejectedValue(new Error("database details must not leak"));
+    await expect(makeHandler()(job)).rejects.toThrow(/provider action was not executed/);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.markFailed).toHaveBeenCalledWith(
+      "tenant-a",
+      "operation-a",
+      ProviderOperationStatus.PERMANENT_FAILURE,
+      "Active provider connection could not be resolved; no provider request was sent."
+    );
+  });
+
+  it("fails closed when a legacy operation has no provider connection ID", async () => {
+    const legacyOperation = { ...operation, providerConnectionId: "" } as unknown as ProviderOperation;
+    mocks.getById.mockResolvedValue(legacyOperation);
+    mocks.claim.mockResolvedValue({ ...legacyOperation, status: ProviderOperationStatus.RUNNING });
+    await expect(makeHandler()(job)).rejects.toThrow(/provider action was not executed/);
+    expect(mocks.getActiveCredentials).not.toHaveBeenCalled();
     expect(mocks.execute).not.toHaveBeenCalled();
   });
 
