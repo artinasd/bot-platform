@@ -138,9 +138,13 @@ export const cache = {
     const redis = getRedisClient();
 
     if (redis) {
-      const value = await redis.incr(key);
-      if (value === 1) await redis.expire(key, ttlSeconds);
-      return value;
+      // Keep INCR and first-write expiry atomic so a process/network failure
+      // cannot leave a rate-limit counter without a TTL.
+      return redis.eval<number>(
+        "local value = redis.call('INCR', KEYS[1]); if value == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]); end; return value",
+        [key],
+        [String(ttlSeconds)]
+      );
     }
 
     const existingValue = localGet(key);
