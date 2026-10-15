@@ -13,12 +13,8 @@ function makeRecovery(overrides: {
   staleAgeMs?: number;
   tenantBatchSize?: number;
 } = {}) {
-  const db = {
-    tenant: { findMany: mocks.tenantFindMany }
-  };
-  const operations = {
-    markExpiredRunningUnknown: mocks.markExpiredRunningUnknown
-  };
+  const db = { tenant: { findMany: mocks.tenantFindMany } };
+  const operations = { markExpiredRunningUnknown: mocks.markExpiredRunningUnknown };
   return new ProviderOperationRecoveryService(
     db as never,
     operations as unknown as ProviderOperationService,
@@ -37,35 +33,39 @@ describe("provider operation recovery service", () => {
 
   it("scans only tenants with stale running operations and uses a five-minute safety cutoff", async () => {
     const recovery = makeRecovery();
-
     await expect(recovery.recoverExpiredRunning()).resolves.toEqual({
-      tenantsScanned: 2,
-      operationsMarkedUnknown: 4
+      tenantsScanned: 2, operationsMarkedUnknown: 4
     });
-
     const staleBefore = new Date("2026-10-14T11:55:00.000Z");
     expect(mocks.tenantFindMany).toHaveBeenCalledWith({
-      where: {
-        providerOperations: {
-          some: {
-            status: ProviderOperationStatus.RUNNING,
-            updatedAt: { lt: staleBefore }
-          }
-        }
-      },
-      select: { id: true },
-      orderBy: { id: "asc" },
-      take: 500
+      where: { providerOperations: { some: {
+        status: ProviderOperationStatus.RUNNING, updatedAt: { lt: staleBefore }
+      } } },
+      select: { id: true }, orderBy: { id: "asc" }, take: 500
     });
     expect(mocks.markExpiredRunningUnknown).toHaveBeenNthCalledWith(1, "tenant-a", staleBefore);
     expect(mocks.markExpiredRunningUnknown).toHaveBeenNthCalledWith(2, "tenant-b", staleBefore);
   });
 
+  it("continues past full tenant batches so later tenants are not starved", async () => {
+    mocks.tenantFindMany.mockResolvedValueOnce([{ id: "tenant-a" }, { id: "tenant-b" }])
+      .mockResolvedValueOnce([{ id: "tenant-c" }]);
+    mocks.markExpiredRunningUnknown.mockResolvedValue(1);
+    const recovery = makeRecovery({ tenantBatchSize: 2 });
+    await expect(recovery.recoverExpiredRunning()).resolves.toEqual({
+      tenantsScanned: 3, operationsMarkedUnknown: 3
+    });
+    expect(mocks.tenantFindMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      take: 2, cursor: { id: "tenant-b" }, skip: 1
+    }));
+    expect(mocks.markExpiredRunningUnknown.mock.calls.map(([tenantId]) => tenantId))
+      .toEqual(["tenant-a", "tenant-b", "tenant-c"]);
+  });
+
   it("returns zero counts when no tenants need recovery", async () => {
     mocks.tenantFindMany.mockResolvedValue([]);
     await expect(makeRecovery().recoverExpiredRunning()).resolves.toEqual({
-      tenantsScanned: 0,
-      operationsMarkedUnknown: 0
+      tenantsScanned: 0, operationsMarkedUnknown: 0
     });
     expect(mocks.markExpiredRunningUnknown).not.toHaveBeenCalled();
   });
@@ -90,13 +90,10 @@ describe("provider operation recovery service", () => {
   it("keeps processing tenant-scoped recovery sequentially", async () => {
     const order: string[] = [];
     mocks.markExpiredRunningUnknown.mockImplementation(async (tenantId: string) => {
-      order.push(tenantId);
-      return 1;
+      order.push(tenantId); return 1;
     });
-
     await expect(makeRecovery().recoverExpiredRunning()).resolves.toEqual({
-      tenantsScanned: 2,
-      operationsMarkedUnknown: 2
+      tenantsScanned: 2, operationsMarkedUnknown: 2
     });
     expect(order).toEqual(["tenant-a", "tenant-b"]);
   });

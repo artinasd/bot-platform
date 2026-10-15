@@ -37,33 +37,41 @@ export class ProviderOperationRecoveryService {
     }
     const staleBefore = new Date(now.getTime() - this.staleAgeMs);
 
-    // Scan only tenants with candidates. The per-tenant update remains scoped
-    // by ProviderOperationService and rechecks status/updatedAt to avoid races.
-    const tenants = await this.db.tenant.findMany({
-      where: {
-        providerOperations: {
-          some: {
-            status: ProviderOperationStatus.RUNNING,
-            updatedAt: { lt: staleBefore }
-          }
-        }
-      },
-      select: { id: true },
-      orderBy: { id: "asc" },
-      take: this.tenantBatchSize
-    });
-
+    // Paginate tenants with stale candidates so tenants beyond the first batch
+    // cannot be starved by a permanently full, alphabetically early first page.
+    let cursorId: string | undefined;
+    let tenantsScanned = 0;
     let operationsMarkedUnknown = 0;
-    for (const tenant of tenants) {
-      operationsMarkedUnknown += await this.operations.markExpiredRunningUnknown(
-        tenant.id,
-        staleBefore
-      );
+
+    while (true) {
+      const tenants = await this.db.tenant.findMany({
+        where: {
+          providerOperations: {
+            some: {
+              status: ProviderOperationStatus.RUNNING,
+              updatedAt: { lt: staleBefore }
+            }
+          }
+        },
+        select: { id: true },
+        orderBy: { id: "asc" },
+        take: this.tenantBatchSize,
+        ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {})
+      });
+
+      tenantsScanned += tenants.length;
+      for (const tenant of tenants) {
+        operationsMarkedUnknown += await this.operations.markExpiredRunningUnknown(
+          tenant.id,
+          staleBefore
+        );
+      }
+
+      if (tenants.length < this.tenantBatchSize) break;
+      cursorId = tenants[tenants.length - 1]?.id;
+      if (!cursorId) break;
     }
 
-    return {
-      tenantsScanned: tenants.length,
-      operationsMarkedUnknown
-    };
+    return { tenantsScanned, operationsMarkedUnknown };
   }
 }
