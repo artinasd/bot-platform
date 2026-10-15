@@ -140,11 +140,12 @@ export const cache = {
     if (redis) {
       // Keep INCR and first-write expiry atomic so a process/network failure
       // cannot leave a rate-limit counter without a TTL.
-      return redis.eval<number>(
-        "local value = redis.call('INCR', KEYS[1]); if value == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]); end; return value",
+      const result = await redis.eval<[number]>(
+        "local value = redis.call('INCR', KEYS[1]); if value == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]); end; return {value}",
         [key],
         [String(ttlSeconds)]
       );
+      return Number(result[0]);
     }
 
     const existingValue = localGet(key);
